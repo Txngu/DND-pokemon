@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PhoneLayout } from "@/components/phone/PhoneLayout";
+import { PhoneLockProvider } from "@/hooks/usePhoneLock";
 import Login from "@/pages/Login";
 import Home from "@/pages/Home";
 import Profile from "@/pages/Profile";
@@ -18,7 +19,13 @@ export default function App() {
       <Route path="/login" element={<Login />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route element={<PhoneLayout />}>
+        <Route
+          element={
+            <PhoneLockProvider>
+              <PhoneLayout />
+            </PhoneLockProvider>
+          }
+        >
           <Route path="/" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/bag" element={<Bag />} />

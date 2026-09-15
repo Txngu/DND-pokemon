@@ -9,26 +9,33 @@ interface PhoneFrameProps {
 
 /**
  * The physical Rotom Phone chrome: a red bezel with a single glowing "eye"
- * camera dot, wrapping a dark rounded screen viewport. All app screens
- * render inside the `.phone-screen` element passed as children.
+ * camera dot, wrapping a dark rounded screen viewport.
+ *
+ * Responsive behaviour: on real phone-sized viewports (< sm breakpoint) the
+ * "phone within a phone" bezel would just waste screen space, so the frame
+ * goes full-bleed and behaves like a native app. From the sm breakpoint up
+ * (tablet, laptop, desktop) it renders as a fixed-size phone mockup centered
+ * on an ambient background, so it still reads as a smartphone rather than a
+ * stretched dashboard.
  */
 export function PhoneFrame({ children, wallpaper, className }: PhoneFrameProps) {
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-rotom-gradient px-4 py-8">
+    <div className="flex min-h-[100dvh] w-full items-center justify-center bg-rotom-gradient sm:px-4 sm:py-8">
       <div
         className={cn(
-          "relative flex h-[780px] max-h-[92vh] w-[380px] max-w-[92vw] flex-col rounded-phone bg-gradient-to-b from-rotom-red to-rotom-red-dark p-3 shadow-phone-bezel",
+          "relative flex h-[100dvh] w-full flex-col rounded-none bg-gradient-to-b from-rotom-red to-rotom-red-dark p-0 shadow-none",
+          "sm:h-[780px] sm:max-h-[92vh] sm:w-[380px] sm:max-w-[92vw] sm:rounded-phone sm:p-3 sm:shadow-phone-bezel",
           className
         )}
       >
-        {/* Rotom "eye" */}
-        <div className="absolute left-1/2 top-5 z-20 flex -translate-x-1/2 items-center gap-1.5">
+        {/* Rotom "eye" — only shown when the bezel itself is visible */}
+        <div className="absolute left-1/2 top-5 z-20 hidden -translate-x-1/2 items-center gap-1.5 sm:flex">
           <span className="h-2 w-2 animate-pulse-glow rounded-full bg-volt shadow-[0_0_10px_2px_rgba(255,210,63,0.7)]" />
         </div>
 
         {/* Screen */}
         <div
-          className="relative flex-1 overflow-hidden rounded-screen bg-screen-ink shadow-inner"
+          className="relative flex-1 overflow-hidden rounded-none bg-screen-ink shadow-inner sm:rounded-screen"
           style={
             wallpaper
               ? { backgroundImage: `url(${wallpaper})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -39,10 +46,10 @@ export function PhoneFrame({ children, wallpaper, className }: PhoneFrameProps) 
           <div className="relative z-10 flex h-full flex-col">{children}</div>
         </div>
 
-        {/* Side buttons (decorative) */}
-        <div className="absolute -right-[3px] top-28 h-14 w-[3px] rounded-l-full bg-black/30" />
-        <div className="absolute -left-[3px] top-24 h-10 w-[3px] rounded-r-full bg-black/30" />
-        <div className="absolute -left-[3px] top-40 h-10 w-[3px] rounded-r-full bg-black/30" />
+        {/* Side buttons (decorative, desktop mockup only) */}
+        <div className="absolute -right-[3px] top-28 hidden h-14 w-[3px] rounded-l-full bg-black/30 sm:block" />
+        <div className="absolute -left-[3px] top-24 hidden h-10 w-[3px] rounded-r-full bg-black/30 sm:block" />
+        <div className="absolute -left-[3px] top-40 hidden h-10 w-[3px] rounded-r-full bg-black/30 sm:block" />
       </div>
     </div>
   );

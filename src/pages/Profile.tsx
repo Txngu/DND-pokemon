@@ -1,4 +1,4 @@
-import { MapPin, Wallet, Fingerprint, Sparkles } from "lucide-react";
+import { MapPin, Wallet, Fingerprint, Sparkles, User } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +20,7 @@ export default function Profile() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppScreenHeader title="Trainer Profile" />
+      <AppScreenHeader title="Trainer Profile" icon={<User className="h-5 w-5" strokeWidth={1.75} />} />
 
       <div className="flex-1 overflow-y-auto px-5 py-6">
         <div className="flex flex-col items-center gap-3 pb-6">

@@ -119,6 +119,16 @@ supabase/
 
 The phone chrome (`PhoneFrame`) mimics the Rotom Phone: a deep red bezel with a single glowing "eye," wrapping a dark rounded screen. Icons use a glassmorphism treatment (blurred translucent tiles) closer to iOS, per the brief. Typography: Rubik for display/headings, Inter for body text, JetBrains Mono for time/IDs/data. The lock screen unlocks via an actual drag gesture (Framer Motion `drag="y"`), not a button.
 
+## Navigation architecture (Phase 2)
+
+Lock state and route state are intentionally decoupled:
+
+- `PhoneLockProvider` (`src/hooks/usePhoneLock.tsx`) holds `locked` in a React context mounted **once per session**, above the router outlet (see `App.tsx`), not inside any individual page component.
+- `PhoneLayout` reads that context and renders either the `LockScreen` or the routed app (`AnimatedOutlet` → `Outlet`) — the Lock Screen is never a route and is never part of React Router's navigation stack.
+- Every app screen's back arrow (`AppScreenHeader`) calls `navigate("/")` directly rather than `navigate(-1)`, so it always lands on the Home Screen regardless of browser history, and can never land back on the Lock Screen.
+
+This fixes a Phase 1 bug where the unlocked/locked flag lived as local `useState` inside the Home route component; navigating to `/bag` and back to `/` remounted that component and reset it to `locked`, popping the Lock Screen back up. Since the flag now lives above the routed pages, opening any app and pressing back always returns to the Home Screen, never the Lock Screen.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

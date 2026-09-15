@@ -25,7 +25,7 @@ export function AppIcon({ label, to, icon, gradient, className }: AppIconProps) 
     <button
       type="button"
       onClick={handleTap}
-      className={cn("flex flex-col items-center gap-1.5 focus:outline-none", className)}
+      className={cn("flex touch-manipulation flex-col items-center gap-1.5 focus:outline-none", className)}
     >
       <motion.div
         whileTap={{ scale: 0.88 }}

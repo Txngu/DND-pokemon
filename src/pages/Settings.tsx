@@ -8,7 +8,7 @@ export default function Settings() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppScreenHeader title="Settings" />
+      <AppScreenHeader title="Settings" icon={<SettingsIcon className="h-5 w-5" strokeWidth={1.75} />} />
 
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-5">
         <div className="glass flex items-center gap-3 rounded-2xl p-4 text-mist/60">
