@@ -129,6 +129,32 @@ Lock state and route state are intentionally decoupled:
 
 This fixes a Phase 1 bug where the unlocked/locked flag lived as local `useState` inside the Home route component; navigating to `/bag` and back to `/` remounted that component and reset it to `locked`, popping the Lock Screen back up. Since the flag now lives above the routed pages, opening any app and pressing back always returns to the Home Screen, never the Lock Screen.
 
+## Phase 3: trainer data, Bag & Pokémon
+
+New tables (`supabase/migrations/0002_bag_pokemon.sql`):
+
+- **`species`** — a small Gen 1 reference catalog (id = national dex number, name). Sprites need no stored URL at all: they're derived client-side from the numeric id via PokeAPI's public sprite repo (`src/lib/sprites.ts`), so there's no manual image upload step, ever.
+- **`items_catalog`** — master list of items across all four Bag categories (Poké Ball, Item, Evolution Item, Key Item), seeded with ~39 classic items. Each row carries a `pokeapi_slug` used the same way, to resolve its icon automatically.
+- **`trainer_pokemon`** — one row per owned Pokémon: species, nickname, level, nature, ability, held item, HP, status, favorite flag.
+- **`trainer_items`** — one row per (trainer, item) stack, with a `quantity`. This is what powers the "Ultra Ball × 5" style counts in the Bag.
+
+**Everything persists in Supabase** — refreshing the page, or logging out and back in, restores the exact same Pokémon, items, and money, because none of it is ever held only in frontend state; TanStack Query just caches what's read from Supabase.
+
+### Security model for Phase 3
+
+- Trainers can **read** their own `trainer_pokemon` and `trainer_items` rows only (RLS), and admins can read/write any row — this is what "give/remove Pokémon", "give/remove items" will hook into later, with no schema changes needed.
+- Trainers can **only** change two things directly: a Pokémon's `is_favorite` flag, and its held item (via the `set_held_item()` function below). Every other column — level, HP, species, nature, ability — is admin-only, enforced by a Postgres trigger (`enforce_trainer_pokemon_update_guard`), not just app-level convention. Inserting or deleting a `trainer_pokemon`/`trainer_items` row ("giving"/"removing" one) is admin-only at the RLS level.
+- **`set_held_item(pokemon_id, item_id)`** is a `security definer` function that atomically swaps a Pokémon's held item: it returns whatever was previously held back into the Bag, and removes the newly held item's count, in one transaction — so Bag counts can never drift out of sync with what's actually equipped.
+- **Security fix carried over from Phase 1**: the original `profiles` RLS policy allowed a trainer to update their own row, but only checked row ownership — not which columns changed. That meant a trainer could, in principle, call the API directly and set their own `money` or `role`. A new trigger (`enforce_profile_update_guard`) now silently keeps `money`, `role`, `auth_id`, `trainer_id`, and `created_at` pinned to their existing values unless the caller is an admin, regardless of what a client sends. Money can now only ever change via an admin, or later, gameplay logic running with admin/service privileges — never directly from a trainer's own client.
+
+### Bag app
+
+Five tabs — Pokémon, Poké Balls, Items, Evolution Items, Key Items — each showing live counts (`useTrainerItems` + `groupItemsByCategory`). Tapping a Pokémon opens a detail view in place (not a new route), so its own back arrow returns to the Bag list rather than jumping all the way home — `AppScreenHeader` now accepts an optional `onBack` override for exactly this kind of nested screen.
+
+### Adding data for a trainer to see
+
+There's no admin UI yet (Phase 3 only asks the database to be *ready* for one), so give a trainer a Pokémon/items/money directly in the Supabase SQL editor — examples are included as comments at the bottom of `0002_bag_pokemon.sql`.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

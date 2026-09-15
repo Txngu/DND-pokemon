@@ -7,15 +7,19 @@ interface AppScreenHeaderProps {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
+  onBack?: () => void;
 }
 
 /**
- * Consistent header used by every app screen. The back arrow always
+ * Consistent header used by every app screen. By default the back arrow
  * navigates to the Home Screen ("/"), never through browser history — that
- * keeps the Lock Screen out of the app navigation stack entirely.
+ * keeps the Lock Screen out of the app navigation stack entirely. Pass
+ * `onBack` to override this for a nested sub-screen (e.g. a Pokémon detail
+ * view inside the Bag should return to the Bag list, not all the way home).
  */
-export function AppScreenHeader({ title, subtitle, icon }: AppScreenHeaderProps) {
+export function AppScreenHeader({ title, subtitle, icon, onBack }: AppScreenHeaderProps) {
   const navigate = useNavigate();
+  const handleBack = onBack ?? (() => navigate("/"));
 
   return (
     <div className="border-b border-white/5 pb-3">
@@ -23,7 +27,7 @@ export function AppScreenHeader({ title, subtitle, icon }: AppScreenHeaderProps)
       <div className="mt-4 flex items-center gap-3 px-4">
         <motion.button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={handleBack}
           whileTap={{ scale: 0.85, x: -2 }}
           transition={{ type: "spring", stiffness: 500, damping: 25 }}
           className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full bg-white/5 text-mist active:bg-white/10"
