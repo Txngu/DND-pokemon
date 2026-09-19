@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Backpack, CircleDot, Sparkles, KeyRound, PawPrint } from "lucide-react";
+import { Backpack, CircleDot, Sparkles, KeyRound, PawPrint, Cross, Swords, Gem, Box } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { PokemonCard } from "@/components/phone/PokemonCard";
 import { PokemonDetailView } from "@/components/phone/PokemonDetailView";
@@ -15,9 +15,12 @@ type TabKey = "pokemon" | ItemCategory;
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "pokemon", label: "Pokémon", icon: <PawPrint className="h-4 w-4" /> },
   { key: "poke_ball", label: "Poké Balls", icon: <CircleDot className="h-4 w-4" /> },
-  { key: "item", label: "Items", icon: <Backpack className="h-4 w-4" /> },
-  { key: "evolution_item", label: "Evolution", icon: <Sparkles className="h-4 w-4" /> },
+  { key: "medicine", label: "Medicine", icon: <Cross className="h-4 w-4" /> },
+  { key: "battle", label: "Battle", icon: <Swords className="h-4 w-4" /> },
+  { key: "evolution", label: "Evolution", icon: <Sparkles className="h-4 w-4" /> },
   { key: "key_item", label: "Key Items", icon: <KeyRound className="h-4 w-4" /> },
+  { key: "quest", label: "Quest", icon: <Gem className="h-4 w-4" /> },
+  { key: "other", label: "Other", icon: <Box className="h-4 w-4" /> },
 ];
 
 export default function Bag() {

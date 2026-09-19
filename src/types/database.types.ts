@@ -1,5 +1,5 @@
 export type UserRole = "trainer" | "admin";
-export type ItemCategory = "item" | "poke_ball" | "evolution_item" | "key_item";
+export type ItemCategory = "poke_ball" | "medicine" | "evolution" | "battle" | "key_item" | "quest" | "other";
 export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "fainted";
 
 export interface Database {
@@ -93,27 +93,118 @@ export interface Database {
           id: string;
           name: string;
           category: ItemCategory;
-          pokeapi_slug: string;
+          pokeapi_slug: string | null;
+          icon_url: string | null;
+          icon_emoji: string | null;
           description: string | null;
+          value: number | null;
+          is_tradable: boolean;
+          is_sellable: boolean;
           sort_order: number;
+          created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           category: ItemCategory;
-          pokeapi_slug: string;
+          pokeapi_slug?: string | null;
+          icon_url?: string | null;
+          icon_emoji?: string | null;
           description?: string | null;
+          value?: number | null;
+          is_tradable?: boolean;
+          is_sellable?: boolean;
           sort_order?: number;
+          created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
           category?: ItemCategory;
-          pokeapi_slug?: string;
+          pokeapi_slug?: string | null;
+          icon_url?: string | null;
+          icon_emoji?: string | null;
           description?: string | null;
+          value?: number | null;
+          is_tradable?: boolean;
+          is_sellable?: boolean;
           sort_order?: number;
+          created_at?: string;
         };
         Relationships: [];
+      };
+      shop_listings: {
+        Row: {
+          id: string;
+          item_id: string;
+          price: number;
+          stock: number | null;
+          is_enabled: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          item_id: string;
+          price: number;
+          stock?: number | null;
+          is_enabled?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          item_id?: string;
+          price?: number;
+          stock?: number | null;
+          is_enabled?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shop_listings_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: true;
+            referencedRelation: "items_catalog";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          profile_id: string;
+          kind: string;
+          title: string;
+          body: string;
+          read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id: string;
+          kind?: string;
+          title: string;
+          body?: string;
+          read?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          profile_id?: string;
+          kind?: string;
+          title?: string;
+          body?: string;
+          read?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_profile_id_fkey";
+            columns: ["profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       trainer_pokemon: {
         Row: {
@@ -288,6 +379,10 @@ export interface Database {
         Args: { p_pokemon_a: string; p_pokemon_b: string };
         Returns: void;
       };
+      purchase_item: {
+        Args: { p_listing_id: string; p_quantity?: number };
+        Returns: void;
+      };
     };
     Enums: {
       user_role: UserRole;
@@ -305,6 +400,13 @@ export type ItemCatalogEntry = Database["public"]["Tables"]["items_catalog"]["Ro
 export type TrainerPokemonRow = Database["public"]["Tables"]["trainer_pokemon"]["Row"];
 export type TrainerItemRow = Database["public"]["Tables"]["trainer_items"]["Row"];
 export type PcBox = Database["public"]["Tables"]["pc_boxes"]["Row"];
+export type ShopListingRow = Database["public"]["Tables"]["shop_listings"]["Row"];
+export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
+
+/** shop_listings joined with its item_catalog entry, as fetched by useShopListings(). */
+export interface ShopListing extends ShopListingRow {
+  item: ItemCatalogEntry;
+}
 
 /** trainer_pokemon joined with its species + held item, as fetched by useTrainerPokemon(). */
 export interface TrainerPokemon extends TrainerPokemonRow {

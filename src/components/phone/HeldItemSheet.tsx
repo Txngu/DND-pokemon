@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Ban } from "lucide-react";
-import { SpriteImage } from "@/components/phone/SpriteImage";
-import { itemSpriteUrl } from "@/lib/sprites";
+import { ItemIcon } from "@/components/phone/ItemIcon";
 import type { TrainerItem } from "@/types/database.types";
 
 interface HeldItemSheetProps {
@@ -13,7 +12,9 @@ interface HeldItemSheetProps {
 }
 
 export function HeldItemSheet({ open, items, currentItemId, onClose, onSelect }: HeldItemSheetProps) {
-  const eligible = items.filter((i) => i.item.category === "item" || i.item.category === "evolution_item");
+  const eligible = items.filter((i) =>
+    ["medicine", "evolution", "battle", "other"].includes(i.item.category)
+  );
 
   return (
     <AnimatePresence>
@@ -77,12 +78,7 @@ export function HeldItemSheet({ open, items, currentItemId, onClose, onSelect }:
                     className="flex w-full touch-manipulation items-center gap-3 rounded-2xl bg-white/5 p-3 text-left disabled:opacity-40"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5">
-                      <SpriteImage
-                        src={itemSpriteUrl(entry.item.pokeapi_slug)}
-                        alt={entry.item.name}
-                        className="h-6 w-6"
-                        fallbackClassName="h-6 w-6"
-                      />
+                      <ItemIcon item={entry.item} className="h-6 w-6" />
                     </div>
                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-mist">{entry.item.name}</p>
                     <p className="shrink-0 font-mono text-xs text-mist/50">×{entry.quantity}</p>

@@ -180,6 +180,27 @@ Dropping onto an **occupied** slot needs both Pokémon to swap places atomically
 
 Same model as Bag/Pokémon in Phase 3: RLS scopes every `pc_boxes` and `trainer_pokemon` row to `auth.uid()`'s own profile, and only admins can read or write another trainer's rows — including box renames, since even renaming is gated by the same ownership check.
 
+## Phase 5: Shop & item economy
+
+New in `supabase/migrations/0004_shop_economy.sql`:
+
+- **Item categories expanded** from Phase 3's 4 values to the full spec list: Poké Ball, Medicine, Evolution, Battle, Key Item, Quest, Other. Changing an enum's value set safely in Postgres means building a new enum and migrating the column over rather than `ALTER TYPE` in place — existing items are automatically remapped (e.g. old `evolution_item` → `evolution`, old generic `item` → `medicine` or `other` depending on which item it actually was).
+- **`items_catalog` now supports fully custom items**: `pokeapi_slug` is optional, and there's `icon_url` and `icon_emoji` as alternatives — an admin can create a D&D quest item with just an emoji and no real artwork at all. New fields: `value`, `is_tradable`, `is_sellable`, `created_at`.
+- **`shop_listings`** is a separate table from `items_catalog` on purpose: an item can exist (be owned, held, shown in the Bag) without ever being for sale, and pulling something off the shelf (or changing its price/stock) never touches or endangers what trainers already own. Master Ball, Safari Ball, and all Key Items are seeded with *no* listing at all, same as in the actual games.
+- **`notifications`** — a general per-trainer event feed. Purchases write to it automatically (satisfying the "create a notification/purchase record" step), and the Notifications app is no longer a placeholder — it now shows this real feed, with unread dots and tap-to-mark-read.
+
+### The purchase transaction
+
+`purchase_item(listing_id, quantity)` is a single `security definer` Postgres function that does the entire flow from the spec in one atomic transaction: lock the listing and the caller's own profile row, verify the listing is enabled, check money, check stock, deduct money, decrement stock, upsert the item into `trainer_items`, and write a notification — all or nothing. A couple of things worth calling out:
+
+- **The trainer's profile is looked up from `auth.uid()` inside the function, never passed in as a parameter.** There's no `profile_id` argument to tamper with — a trainer can only ever spend their own money by construction, not because of an extra permission check that could be gotten wrong.
+- **Both the listing row and the profile row are locked (`FOR UPDATE`)** before any check happens, so two rapid purchases (e.g. a double-tap) can't both read the same stock count or the same balance and both succeed — the second one blocks until the first fully commits, then sees the updated numbers.
+- **Money deduction reuses the Phase 4 bypass-flag pattern**: the profiles table still has a trigger blocking a trainer from setting their own `money` directly, so `purchase_item` briefly sets a session flag the trigger checks for, exactly like `set_held_item()` already does for Pokémon.
+
+### Admin shop management
+
+Unlike Phases 3–4 (where "admin compatibility" meant designing the database for a future admin UI), Phase 5's admin capabilities are wired up as an actual in-app panel: open the Shop as an admin account and tap **Manage** to edit price/stock/enabled inline on any listing, delete a listing, or create a brand-new custom item (name, description, category, emoji icon, optional PokeAPI slug, value, tradable/sellable flags, price, and stock) in one form — which is exactly the "Custom Items" workflow the spec describes for adding D&D-style objects that aren't official Pokémon items at all.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

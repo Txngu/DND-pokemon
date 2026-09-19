@@ -51,9 +51,12 @@ export function useTrainerItems() {
 export function groupItemsByCategory(items: TrainerItem[] | undefined) {
   const buckets: Record<ItemCatalogEntry["category"], TrainerItem[]> = {
     poke_ball: [],
-    item: [],
-    evolution_item: [],
+    medicine: [],
+    evolution: [],
+    battle: [],
     key_item: [],
+    quest: [],
+    other: [],
   };
   for (const entry of items ?? []) {
     buckets[entry.item.category].push(entry);

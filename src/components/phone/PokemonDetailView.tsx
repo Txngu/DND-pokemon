@@ -3,10 +3,11 @@ import { Star, Swords, Sparkles, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { SpriteImage } from "@/components/phone/SpriteImage";
+import { ItemIcon } from "@/components/phone/ItemIcon";
 import { HpBar } from "@/components/phone/HpBar";
 import { StatusBadge } from "@/components/phone/StatusBadge";
 import { HeldItemSheet } from "@/components/phone/HeldItemSheet";
-import { pokemonArtworkUrl, itemSpriteUrl } from "@/lib/sprites";
+import { pokemonArtworkUrl } from "@/lib/sprites";
 import { useTrainerItems, useToggleFavorite, useSetHeldItem } from "@/hooks/useBag";
 import type { TrainerPokemon } from "@/types/database.types";
 
@@ -76,12 +77,7 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5">
             {pokemon.held_item ? (
-              <SpriteImage
-                src={itemSpriteUrl(pokemon.held_item.pokeapi_slug)}
-                alt={pokemon.held_item.name}
-                className="h-7 w-7"
-                fallbackClassName="h-7 w-7"
-              />
+              <ItemIcon item={pokemon.held_item} className="h-7 w-7" />
             ) : (
               <Package className="h-5 w-5 text-mist/40" />
             )}
