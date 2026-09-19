@@ -155,6 +155,31 @@ Five tabs — Pokémon, Poké Balls, Items, Evolution Items, Key Items — each 
 
 There's no admin UI yet (Phase 3 only asks the database to be *ready* for one), so give a trainer a Pokémon/items/money directly in the Supabase SQL editor — examples are included as comments at the bottom of `0002_bag_pokemon.sql`.
 
+## Phase 4: PC storage system
+
+New in `supabase/migrations/0003_pc_system.sql`:
+
+- **`pc_boxes`** — every trainer automatically gets 8 boxes (`Box 1`…`Box 8`, 30 slots each) the moment their profile is created, via a trigger. Existing profiles from earlier phases are backfilled by the same migration.
+- **`trainer_pokemon` gains a location**: `party_slot` (1–6) or `box_id` + `box_slot` (1–30) — never both, never neither, enforced by a `CHECK` constraint. Pre-existing Phase 3 Pokémon get placed into the party (then Box 1) automatically so nothing is lost.
+- The Phase 3 update guard is extended so a trainer can now move their own Pokémon's location directly (party ⇄ box, box ⇄ box) — everything else about a Pokémon (level, species, stats…) is still admin-only.
+
+### Why moves and swaps are two different code paths
+
+Dropping a Pokémon onto an **empty** slot is a single-row update — the client does that directly.
+
+Dropping onto an **occupied** slot needs both Pokémon to swap places atomically. Two separate client-side updates can't do this safely: the moment the first one lands, both Pokémon would briefly point at the same slot, which a uniqueness rule would (correctly) reject. So this goes through **`swap_pokemon_slots()`**, a `security definer` function that updates both rows in one transaction. The uniqueness rule itself (`EXCLUDE` constraints on `(profile_id, party_slot)` and `(box_id, box_slot)`, using `btree_gist`) is declared `DEFERRABLE`, and the function explicitly defers it for that transaction — so the momentary "both in the same place" state is allowed to exist for a few milliseconds mid-swap, and only checked once everything's settled, right before commit.
+
+### PC app
+
+- **Party** (6 slots) always visible at the top; **box** grid (30 slots) below it, with prev/next arrows and a tap-to-rename box name.
+- **Two ways to move a Pokémon**, both fully touch-friendly: drag it with [@dnd-kit](https://dndkit.com/) (works with touch and mouse), or tap it once to select (it gets a ring highlight — the "selection state" from the spec) and tap a destination slot.
+- Tapping a selected Pokémon's **Details** button opens the same detail view as the Bag, with its own back arrow returning to the PC (not Home).
+- Renaming a box, moving, and swapping all write straight to Supabase — refresh mid-session and everything is exactly where you left it.
+
+### Privacy
+
+Same model as Bag/Pokémon in Phase 3: RLS scopes every `pc_boxes` and `trainer_pokemon` row to `auth.uid()`'s own profile, and only admins can read or write another trainer's rows — including box renames, since even renaming is gated by the same ownership check.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
