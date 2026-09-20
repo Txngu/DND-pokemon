@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/phone/StatusBadge";
 import { HeldItemSheet } from "@/components/phone/HeldItemSheet";
 import { pokemonArtworkUrl } from "@/lib/sprites";
 import { useTrainerItems, useToggleFavorite, useSetHeldItem } from "@/hooks/useBag";
+import { toast } from "@/lib/toast";
 import type { TrainerPokemon } from "@/types/database.types";
 
 export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon; onBack: () => void }) {
@@ -41,7 +42,13 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
 
           <button
             type="button"
-            onClick={() => toggleFavorite.mutate({ pokemonId: pokemon.id, isFavorite: !pokemon.is_favorite })}
+            onClick={() => {
+              const next = !pokemon.is_favorite;
+              toggleFavorite.mutate(
+                { pokemonId: pokemon.id, isFavorite: next },
+                { onSuccess: () => toast(next ? "Added to favorites" : "Removed from favorites", "success") }
+              );
+            }}
             disabled={toggleFavorite.isPending}
             className="mt-1 flex touch-manipulation items-center gap-1.5 rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-mist active:scale-95 disabled:opacity-50"
           >
@@ -106,7 +113,15 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
         currentItemId={pokemon.held_item_id}
         onClose={() => setSheetOpen(false)}
         onSelect={(itemId) => {
-          setHeldItem.mutate({ pokemonId: pokemon.id, itemId }, { onSuccess: () => setSheetOpen(false) });
+          setHeldItem.mutate(
+            { pokemonId: pokemon.id, itemId },
+            {
+              onSuccess: () => {
+                setSheetOpen(false);
+                toast(itemId ? "Held item updated" : "Held item removed", "success");
+              },
+            }
+          );
         }}
       />
     </div>

@@ -1,9 +1,15 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+interface ResolvedWallpaper {
+  kind: "css" | "image";
+  value: string;
+}
+
 interface PhoneFrameProps {
   children: React.ReactNode;
-  wallpaper?: string | null;
+  wallpaper?: ResolvedWallpaper | null;
+  accentColor?: string | null;
   className?: string;
 }
 
@@ -17,8 +23,23 @@ interface PhoneFrameProps {
  * (tablet, laptop, desktop) it renders as a fixed-size phone mockup centered
  * on an ambient background, so it still reads as a smartphone rather than a
  * stretched dashboard.
+ *
+ * Readability: no matter which wallpaper is active, a fixed dark scrim sits
+ * between the wallpaper and all screen content, so text and icons stay
+ * legible regardless of how bright or busy the chosen wallpaper is.
  */
-export function PhoneFrame({ children, wallpaper, className }: PhoneFrameProps) {
+export function PhoneFrame({ children, wallpaper, accentColor, className }: PhoneFrameProps) {
+  const screenStyle: React.CSSProperties = {
+    ...(accentColor ? ({ "--city-accent": accentColor } as React.CSSProperties) : {}),
+  };
+  if (wallpaper?.kind === "image") {
+    screenStyle.backgroundImage = `url(${wallpaper.value})`;
+    screenStyle.backgroundSize = "cover";
+    screenStyle.backgroundPosition = "center";
+  } else if (wallpaper?.kind === "css") {
+    screenStyle.background = wallpaper.value;
+  }
+
   return (
     <div className="flex min-h-[100dvh] w-full items-center justify-center bg-rotom-gradient sm:px-4 sm:py-8">
       <div
@@ -34,15 +55,9 @@ export function PhoneFrame({ children, wallpaper, className }: PhoneFrameProps) 
         </div>
 
         {/* Screen */}
-        <div
-          className="relative flex-1 overflow-hidden rounded-none bg-screen-ink shadow-inner sm:rounded-screen"
-          style={
-            wallpaper
-              ? { backgroundImage: `url(${wallpaper})`, backgroundSize: "cover", backgroundPosition: "center" }
-              : undefined
-          }
-        >
+        <div className="relative flex-1 overflow-hidden rounded-none bg-screen-ink shadow-inner sm:rounded-screen" style={screenStyle}>
           <div className="absolute inset-0 bg-screen-noise" />
+          <div className="absolute inset-0 bg-gradient-to-b from-screen-ink/25 via-transparent to-screen-ink/70" />
           <div className="relative z-10 flex h-full flex-col">{children}</div>
         </div>
 

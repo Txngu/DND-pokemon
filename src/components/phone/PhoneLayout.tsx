@@ -2,8 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { PhoneFrame } from "@/components/phone/PhoneFrame";
 import { LockScreen } from "@/components/phone/LockScreen";
 import { AnimatedOutlet } from "@/components/phone/AnimatedOutlet";
-import { useProfile } from "@/hooks/useProfile";
+import { ToastViewport } from "@/components/phone/ToastViewport";
+import { useProfile, useCities } from "@/hooks/useProfile";
 import { usePhoneLock } from "@/hooks/usePhoneLock";
+import { resolveWallpaper } from "@/lib/cityThemes";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -16,8 +18,12 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function PhoneLayout() {
   const { data: profile, isLoading } = useProfile();
+  const { data: cities } = useCities();
   const { locked, unlock } = usePhoneLock();
   const navigate = useNavigate();
+
+  const city = cities?.find((c) => c.id === profile?.city_id) ?? null;
+  const wallpaper = resolveWallpaper(profile?.wallpaper, city);
 
   function handleUnlock() {
     unlock();
@@ -25,7 +31,7 @@ export function PhoneLayout() {
   }
 
   return (
-    <PhoneFrame wallpaper={profile?.wallpaper}>
+    <PhoneFrame wallpaper={wallpaper} accentColor={city?.accent_color}>
       {isLoading || !profile ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
           <Skeleton className="h-16 w-16 rounded-full" />
@@ -37,6 +43,7 @@ export function PhoneLayout() {
       ) : (
         <AnimatedOutlet profile={profile} />
       )}
+      <ToastViewport />
     </PhoneFrame>
   );
 }

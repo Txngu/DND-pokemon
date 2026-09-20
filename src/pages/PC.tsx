@@ -17,6 +17,7 @@ import { SpriteImage } from "@/components/phone/SpriteImage";
 import { PokemonDetailView } from "@/components/phone/PokemonDetailView";
 import { Skeleton } from "@/components/ui/skeleton";
 import { pokemonSpriteUrl } from "@/lib/sprites";
+import { toast } from "@/lib/toast";
 import { useTrainerPokemon } from "@/hooks/useBag";
 import {
   usePcBoxes,
@@ -155,7 +156,12 @@ export default function PC() {
                     count={boxes.length}
                     onPrev={() => setBoxIndex((i) => Math.max(0, i - 1))}
                     onNext={() => setBoxIndex((i) => Math.min(boxes.length - 1, i + 1))}
-                    onRename={(name) => renameBox.mutate({ boxId: currentBox.id, name })}
+                    onRename={(name) =>
+                      renameBox.mutate(
+                        { boxId: currentBox.id, name },
+                        { onSuccess: () => toast(`Box renamed to "${name}"`, "success") }
+                      )
+                    }
                   />
                 ) : null}
               </div>

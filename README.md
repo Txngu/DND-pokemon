@@ -233,6 +233,30 @@ The trade screen shows both sides' current offers — Pokémon, items with quant
 
 All five required events write a notification through the same `notifications` table from Phase 5: new request, accepted, declined, cancelled, and completed (plus one bonus one — "your turn to confirm" — when only one side has confirmed so far).
 
+## Phase 7: Notifications, city themes & trainer experience
+
+New in `supabase/migrations/0006_polish.sql`:
+
+- **City themes load dynamically from Supabase**: `cities` gained `theme_key`, `accent_color`, `badge_emoji`, and `wallpaper_key`, seeded per-city (Harmonia = royal blue castle, Blütenhain = teal blossom, Wind City = crimson autumn, Crystal City = violet night). The client only knows how to turn those values into CSS (`src/lib/cityThemes.ts`) — the actual choice of color/badge/wallpaper per city is data, not hardcoded per-city logic.
+- **Wallpaper system**: `profiles.wallpaper` (from Phase 1) is now a real, working system. A trainer's own choice always wins; if unset, it falls back to their city's default. Values are either one of six built-in gradient presets (no image hosting needed) or, for an admin who wants something fully custom, a raw image URL — `PhoneFrame` detects which. A dark scrim between the wallpaper and all screen content (strengthened this phase) keeps text legible regardless of which wallpaper is active.
+- **Automatic "received" notifications**: giving a trainer a Pokémon or items directly (the admin workflow from Phases 3–4) now notifies them automatically, without an admin UI having to remember to do it — a database trigger, not application code, is what makes this reliable. Purchases and trades already had their own specific notification text (from Phases 5–6) and continue to use that instead of a generic one; a session-scoped suppression flag (the same pattern as the Phase 4/5 bypass flags) stops the generic trigger from double-firing under those flows.
+- **Admin money rewards** are detected the same way: the existing profile-guard trigger now notices when an admin (not `purchase_item`/`confirm_trade`) raises a trainer's money, and writes a notification for it — again, no extra admin action required, it falls out of the existing guard.
+- **Notification preferences** (`profiles.notification_prefs`): three simple toggles — Trades / Purchases / Everything else — control what's shown in the trainer's own feed. Worth being precise about scope here: these are a *client-side filter*, not a server-side write suppression. Muting "Purchases" hides purchase notifications from your feed; it doesn't stop `purchase_item` from recording one, the same way muting a push-notification category on a real phone doesn't stop the app from logging the event.
+- Trainers can now delete their own notifications (Phase 5 only allowed admins to).
+
+### Notifications app
+
+Every notification carries a title, message, timestamp, read/unread state, and type-specific icon (purchase, trade, Pokémon received, item received, admin reward). Mark-as-read (tap), mark-all-read, and clear-read (behind a confirm dialog, and deliberately only clears *read* ones so an unactioned trade request can't be lost by accident) are all wired to real Supabase writes. The Notifications app icon on the Home Screen carries a live unread-count badge.
+
+### Polish
+
+- **Toasts**: a lightweight module-level toast store (`src/lib/toast.ts`) that any code can call — including a global fallback wired into TanStack Query's `MutationCache`, so *any* mutation failure anywhere in the app surfaces a toast automatically, not just the ones a screen explicitly renders inline. Success toasts were added at the moments that matter most: purchases, sending/accepting/declining/cancelling/confirming a trade, saving a trade offer, toggling a favorite, changing a held item, renaming a PC box, and updating settings.
+- **Confirmation dialogs** (`ConfirmDialog`): used for signing out and for clearing read notifications — both moments where an accidental tap would be annoying to undo.
+- **Profile** now also shows a city badge (emoji + accent-colored chip, loaded from Supabase), a Pokédex count (distinct species owned, computed from the trainer's actual Pokémon), and "Trainer since."
+- **Settings** now has a real wallpaper picker, profile preferences (favorite Pokémon, avatar), and the notification preference toggles — all persisted, with the account fields that must stay protected (role, Trainer ID) explicitly called out as not editable here, matching what the database already enforces.
+
+One honest scope note: "optional UI accents" from the city theme is applied to the avatar ring (Home Screen and Profile) and the city badge chip — I didn't extend it further into a full re-theme of every accent color across the app (the volt-yellow accent used throughout Phases 2–6 stays as the primary accent everywhere else), since that would have meant touching dozens of already-built components for a genuinely optional, cosmetic requirement. The wallpaper and badge are where the city identity shows up most, and both are fully wired.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

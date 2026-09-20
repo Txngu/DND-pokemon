@@ -7,6 +7,7 @@ import { ItemPickerSheet } from "@/components/phone/ItemPickerSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProfile } from "@/hooks/useProfile";
 import { useTrainerPokemon, useTrainerItems } from "@/hooks/useBag";
+import { toast } from "@/lib/toast";
 import {
   useTradeDetail,
   useRespondTradeRequest,
@@ -82,7 +83,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => respond.mutate({ tradeId, accept: false })}
+                onClick={() => respond.mutate({ tradeId, accept: false }, { onSuccess: () => toast("Trade declined", "info") })}
                 disabled={respond.isPending}
                 className="flex-1 touch-manipulation rounded-2xl bg-white/5 py-2.5 text-sm font-medium text-mist active:scale-[0.98] disabled:opacity-50"
               >
@@ -90,7 +91,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
               </button>
               <button
                 type="button"
-                onClick={() => respond.mutate({ tradeId, accept: true })}
+                onClick={() => respond.mutate({ tradeId, accept: true }, { onSuccess: () => toast("Trade accepted — build your offer", "success") })}
                 disabled={respond.isPending}
                 className="flex-1 touch-manipulation rounded-2xl bg-volt py-2.5 text-sm font-semibold text-screen-ink active:scale-[0.98] disabled:opacity-50"
               >
@@ -105,7 +106,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
             <p className="mb-3 text-sm text-mist/70">Waiting for {theirSide.profile.username} to respond…</p>
             <button
               type="button"
-              onClick={() => cancel.mutate(tradeId)}
+              onClick={() => cancel.mutate(tradeId, { onSuccess: () => toast("Trade request cancelled", "info") })}
               disabled={cancel.isPending}
               className="w-full touch-manipulation rounded-2xl bg-white/5 py-2.5 text-sm font-medium text-mist active:scale-[0.98] disabled:opacity-50"
             >
@@ -166,7 +167,12 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
               <button
                 type="button"
                 disabled={!hasUnsavedChanges || setOffer.isPending}
-                onClick={() => setOffer.mutate({ tradeId, pokemonIds: draftPokemon, items: draftItems, money: draftMoney })}
+                onClick={() =>
+                  setOffer.mutate(
+                    { tradeId, pokemonIds: draftPokemon, items: draftItems, money: draftMoney },
+                    { onSuccess: () => toast("Offer saved", "success") }
+                  )
+                }
                 className="w-full touch-manipulation rounded-xl bg-white/10 py-2 text-xs font-semibold text-mist active:scale-[0.98] disabled:opacity-40"
               >
                 {hasUnsavedChanges ? "Save offer" : "Offer saved"}
@@ -187,7 +193,7 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => cancel.mutate(tradeId)}
+                onClick={() => cancel.mutate(tradeId, { onSuccess: () => toast("Trade cancelled", "info") })}
                 disabled={cancel.isPending}
                 className="flex-1 touch-manipulation rounded-2xl bg-white/5 py-2.5 text-sm font-medium text-mist active:scale-[0.98] disabled:opacity-50"
               >
@@ -195,7 +201,11 @@ export function TradeDetailView({ tradeId, onBack }: { tradeId: string; onBack: 
               </button>
               <button
                 type="button"
-                onClick={() => confirm.mutate(tradeId)}
+                onClick={() =>
+                  confirm.mutate(tradeId, {
+                    onSuccess: () => toast("Confirmed! Waiting for the other trainer…", "success"),
+                  })
+                }
                 disabled={confirm.isPending || hasUnsavedChanges || mySide.confirmed}
                 className="flex-1 touch-manipulation rounded-2xl bg-volt py-2.5 text-sm font-semibold text-screen-ink active:scale-[0.98] disabled:opacity-40"
               >

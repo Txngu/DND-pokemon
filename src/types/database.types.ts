@@ -2,6 +2,11 @@ export type UserRole = "trainer" | "admin";
 export type ItemCategory = "poke_ball" | "medicine" | "evolution" | "battle" | "key_item" | "quest" | "other";
 export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "fainted";
 export type TradeStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
+export interface NotificationPrefs {
+  trades: boolean;
+  purchases: boolean;
+  system: boolean;
+}
 
 export interface Database {
   public: {
@@ -10,14 +15,26 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          theme_key: string;
+          accent_color: string;
+          badge_emoji: string;
+          wallpaper_key: string;
         };
         Insert: {
           id?: string;
           name: string;
+          theme_key?: string;
+          accent_color?: string;
+          badge_emoji?: string;
+          wallpaper_key?: string;
         };
         Update: {
           id?: string;
           name?: string;
+          theme_key?: string;
+          accent_color?: string;
+          badge_emoji?: string;
+          wallpaper_key?: string;
         };
         Relationships: [];
       };
@@ -35,6 +52,7 @@ export interface Database {
           favorite_pokemon: string | null;
           role: UserRole;
           created_at: string;
+          notification_prefs: NotificationPrefs;
         };
         Insert: {
           id?: string;
@@ -49,6 +67,7 @@ export interface Database {
           favorite_pokemon?: string | null;
           role?: UserRole;
           created_at?: string;
+          notification_prefs?: NotificationPrefs;
         };
         Update: {
           id?: string;
@@ -63,6 +82,7 @@ export interface Database {
           favorite_pokemon?: string | null;
           role?: UserRole;
           created_at?: string;
+          notification_prefs?: NotificationPrefs;
         };
         Relationships: [
           {

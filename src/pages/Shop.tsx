@@ -8,6 +8,7 @@ import { AdminShopPanel } from "@/components/phone/AdminShopPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useShopListings, usePurchaseItem, groupListingsByCategory } from "@/hooks/useShop";
 import { usePhoneContext } from "@/hooks/usePhoneContext";
+import { toast } from "@/lib/toast";
 import type { ItemCategory, ShopListing } from "@/types/database.types";
 
 type TabKey = "all" | ItemCategory;
@@ -140,9 +141,15 @@ export default function Shop() {
           }}
           onConfirm={(quantity) => {
             if (!purchasing) return;
+            const itemName = purchasing.item.name;
             purchaseItem.mutate(
               { listingId: purchasing.id, quantity },
-              { onSuccess: () => setPurchasing(null) }
+              {
+                onSuccess: () => {
+                  setPurchasing(null);
+                  toast(`Bought ${quantity}x ${itemName}`, "success");
+                },
+              }
             );
           }}
         />

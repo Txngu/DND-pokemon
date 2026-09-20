@@ -4,6 +4,7 @@ import { Search, X, UserPlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useProfile } from "@/hooks/useProfile";
 import { useTrainerSearch, useSendTradeRequest } from "@/hooks/useTrade";
+import { toast } from "@/lib/toast";
 import type { TrainerDirectoryEntry } from "@/types/database.types";
 
 interface PlayerSearchSheetProps {
@@ -88,7 +89,10 @@ export function PlayerSearchSheet({ open, onClose, onRequested }: PlayerSearchSh
                       disabled={sendRequest.isPending}
                       onClick={() =>
                         sendRequest.mutate(r.profile_id, {
-                          onSuccess: (tradeId) => onRequested(tradeId),
+                          onSuccess: (tradeId) => {
+                            toast(`Trade request sent to ${r.username}`, "success");
+                            onRequested(tradeId);
+                          },
                         })
                       }
                       className="flex shrink-0 touch-manipulation items-center gap-1 rounded-full bg-volt px-3 py-1.5 text-xs font-semibold text-screen-ink active:scale-95 disabled:opacity-50"
