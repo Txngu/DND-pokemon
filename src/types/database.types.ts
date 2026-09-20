@@ -1,6 +1,7 @@
 export type UserRole = "trainer" | "admin";
 export type ItemCategory = "poke_ball" | "medicine" | "evolution" | "battle" | "key_item" | "quest" | "other";
 export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "fainted";
+export type TradeStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
 
 export interface Database {
   public: {
@@ -206,6 +207,138 @@ export interface Database {
           }
         ];
       };
+      trades: {
+        Row: {
+          id: string;
+          initiator_id: string;
+          recipient_id: string;
+          status: TradeStatus;
+          initiator_money: number;
+          recipient_money: number;
+          initiator_confirmed: boolean;
+          recipient_confirmed: boolean;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          initiator_id: string;
+          recipient_id: string;
+          status?: TradeStatus;
+          initiator_money?: number;
+          recipient_money?: number;
+          initiator_confirmed?: boolean;
+          recipient_confirmed?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          initiator_id?: string;
+          recipient_id?: string;
+          status?: TradeStatus;
+          initiator_money?: number;
+          recipient_money?: number;
+          initiator_confirmed?: boolean;
+          recipient_confirmed?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "trades_initiator_id_fkey";
+            columns: ["initiator_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "trades_recipient_id_fkey";
+            columns: ["recipient_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      trade_pokemon: {
+        Row: {
+          id: string;
+          trade_id: string;
+          profile_id: string;
+          pokemon_id: string;
+        };
+        Insert: {
+          id?: string;
+          trade_id: string;
+          profile_id: string;
+          pokemon_id: string;
+        };
+        Update: {
+          id?: string;
+          trade_id?: string;
+          profile_id?: string;
+          pokemon_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "trade_pokemon_trade_id_fkey";
+            columns: ["trade_id"];
+            isOneToOne: false;
+            referencedRelation: "trades";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "trade_pokemon_pokemon_id_fkey";
+            columns: ["pokemon_id"];
+            isOneToOne: false;
+            referencedRelation: "trainer_pokemon";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      trade_items: {
+        Row: {
+          id: string;
+          trade_id: string;
+          profile_id: string;
+          item_id: string;
+          quantity: number;
+        };
+        Insert: {
+          id?: string;
+          trade_id: string;
+          profile_id: string;
+          item_id: string;
+          quantity: number;
+        };
+        Update: {
+          id?: string;
+          trade_id?: string;
+          profile_id?: string;
+          item_id?: string;
+          quantity?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "trade_items_trade_id_fkey";
+            columns: ["trade_id"];
+            isOneToOne: false;
+            referencedRelation: "trades";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "trade_items_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: false;
+            referencedRelation: "items_catalog";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       trainer_pokemon: {
         Row: {
           id: string;
@@ -361,7 +494,17 @@ export interface Database {
         ];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      trainer_directory: {
+        Row: {
+          profile_id: string;
+          username: string;
+          trainer_id: string;
+          avatar: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       is_admin: {
         Args: Record<string, never>;
@@ -383,11 +526,41 @@ export interface Database {
         Args: { p_listing_id: string; p_quantity?: number };
         Returns: void;
       };
+      my_profile_id: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
+      send_trade_request: {
+        Args: { p_recipient_profile_id: string };
+        Returns: string;
+      };
+      respond_trade_request: {
+        Args: { p_trade_id: string; p_accept: boolean };
+        Returns: void;
+      };
+      cancel_trade: {
+        Args: { p_trade_id: string };
+        Returns: void;
+      };
+      set_trade_offer: {
+        Args: {
+          p_trade_id: string;
+          p_pokemon_ids: string[] | null;
+          p_items: { item_id: string; quantity: number }[] | null;
+          p_money: number;
+        };
+        Returns: void;
+      };
+      confirm_trade: {
+        Args: { p_trade_id: string };
+        Returns: void;
+      };
     };
     Enums: {
       user_role: UserRole;
       item_category: ItemCategory;
       pokemon_status: PokemonStatus;
+      trade_status: TradeStatus;
     };
   };
 }
@@ -402,6 +575,8 @@ export type TrainerItemRow = Database["public"]["Tables"]["trainer_items"]["Row"
 export type PcBox = Database["public"]["Tables"]["pc_boxes"]["Row"];
 export type ShopListingRow = Database["public"]["Tables"]["shop_listings"]["Row"];
 export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
+export type TradeRow = Database["public"]["Tables"]["trades"]["Row"];
+export type TrainerDirectoryEntry = Database["public"]["Views"]["trainer_directory"]["Row"];
 
 /** shop_listings joined with its item_catalog entry, as fetched by useShopListings(). */
 export interface ShopListing extends ShopListingRow {
@@ -412,6 +587,27 @@ export interface ShopListing extends ShopListingRow {
 export interface TrainerPokemon extends TrainerPokemonRow {
   species: Species;
   held_item: ItemCatalogEntry | null;
+}
+
+/** One side's offer in a trade detail view. */
+export interface TradeOfferSide {
+  profile: TrainerDirectoryEntry;
+  money: number;
+  confirmed: boolean;
+  pokemon: TrainerPokemon[];
+  items: { id: string; item_id: string; item: ItemCatalogEntry; quantity: number }[];
+}
+
+/** A trade fully assembled for display, as fetched by useTradeDetail(). */
+export interface TradeDetail extends TradeRow {
+  initiator: TradeOfferSide;
+  recipient: TradeOfferSide;
+}
+
+/** A trade in list form, as fetched by useMyTrades() - other trainer only, no offer detail. */
+export interface TradeListEntry extends TradeRow {
+  otherTrainer: TrainerDirectoryEntry;
+  isInitiator: boolean;
 }
 
 /** trainer_items joined with its catalog entry, as fetched by useTrainerItems(). */

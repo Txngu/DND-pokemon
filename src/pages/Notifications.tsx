@@ -1,4 +1,4 @@
-import { Bell, ShoppingBag, Info } from "lucide-react";
+import { Bell, ShoppingBag, Info, ArrowLeftRight } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNotifications, useMarkNotificationRead } from "@/hooks/useNotifications";
@@ -17,6 +17,7 @@ function timeAgo(iso: string) {
 
 function iconFor(kind: string) {
   if (kind === "purchase") return <ShoppingBag className="h-4 w-4" />;
+  if (kind.startsWith("trade")) return <ArrowLeftRight className="h-4 w-4" />;
   return <Info className="h-4 w-4" />;
 }
 

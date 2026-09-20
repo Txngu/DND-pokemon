@@ -201,6 +201,38 @@ New in `supabase/migrations/0004_shop_economy.sql`:
 
 Unlike Phases 3–4 (where "admin compatibility" meant designing the database for a future admin UI), Phase 5's admin capabilities are wired up as an actual in-app panel: open the Shop as an admin account and tap **Manage** to edit price/stock/enabled inline on any listing, delete a listing, or create a brand-new custom item (name, description, category, emoji icon, optional PokeAPI slug, value, tradable/sellable flags, price, and stock) in one form — which is exactly the "Custom Items" workflow the spec describes for adding D&D-style objects that aren't official Pokémon items at all.
 
+## Phase 6: Player trading
+
+New in `supabase/migrations/0005_trading.sql`. This is the most safety-critical phase so far — a bug here means someone could lose a Pokémon or duplicate items — so the design leans hard on the database, not client trust.
+
+### Privacy-safe search
+
+`trainer_directory` is a Postgres **view**, not a table: it only ever exposes `username`, `trainer_id`, and `avatar`. The real `profiles` table (with email, money, role, city…) stays exactly as locked down as before. Searching by username or Trainer ID queries this view — there's no code path that can leak private profile fields through search.
+
+### Everything goes through functions, not direct table writes
+
+`trades`, `trade_pokemon`, and `trade_items` have **no insert/update/delete RLS policy for regular trainers at all** — only `SELECT`. Every action (send a request, accept/decline, cancel, change your offer, confirm) is a `security definer` Postgres function. This means the rules — you can only offer your own Pokémon, a non-tradable item can never be selected, a Pokémon can't be offered in two trades at once, changing your offer resets both confirmations — are enforced by the database itself, not just by the UI. A malicious client calling the API directly gets nothing more than what these functions allow.
+
+### The atomic trade completion
+
+`confirm_trade()` marks the caller's side confirmed; if the *other* side had already confirmed, the entire trade executes in that same function call — one transaction:
+
+1. Lock both trades' participant profile rows (in a fixed order, so two trades between the same pair can never deadlock) and the trade row itself.
+2. Re-verify, right before moving anything, that every offered Pokémon still belongs to who offered it and every offered item still exists in sufficient quantity — a trainer could have spent an item or lost a Pokémon some other way since the offer was set.
+3. Move every Pokémon to its new owner, placing it into their party if there's room or their first open PC box slot otherwise (reusing the Phase 4 slot-finding logic) — a traded-in Pokémon needs a valid location just like any other move.
+4. Move every item's quantity, and any money offered, in whichever direction(s) were agreed.
+5. Mark the trade `completed` and notify both sides.
+
+If **any** of these steps fails — insufficient funds, a Pokémon that's vanished, no open PC slot — the function raises an exception and Postgres rolls back the *entire* transaction. Nothing is half-moved; the trade simply stays exactly as it was and the trainer sees a clear error. This is what "if the trade fails, original inventories remain unchanged" means in practice: it's a property of the transaction, not something the app has to carefully re-implement.
+
+### Trade Review
+
+The trade screen shows both sides' current offers — Pokémon, items with quantities, and money — with a live "Confirmed / Not confirmed" badge per side, satisfying the "Your Pokémon ↔ Their Pokémon" review step before either party can lock in.
+
+### Notifications
+
+All five required events write a notification through the same `notifications` table from Phase 5: new request, accepted, declined, cancelled, and completed (plus one bonus one — "your turn to confirm" — when only one side has confirmed so far).
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
