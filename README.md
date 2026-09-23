@@ -257,6 +257,79 @@ Every notification carries a title, message, timestamp, read/unread state, and t
 
 One honest scope note: "optional UI accents" from the city theme is applied to the avatar ring (Home Screen and Profile) and the city badge chip — I didn't extend it further into a full re-theme of every accent color across the app (the volt-yellow accent used throughout Phases 2–6 stays as the primary accent everywhere else), since that would have meant touching dozens of already-built components for a genuinely optional, cosmetic requirement. The wallpaper and badge are where the city identity shows up most, and both are fully wired.
 
+## Phase 8: Admin Dashboard, Rewards & Production Polish
+
+New in `supabase/migrations/0007_admin.sql` and `supabase/functions/admin-users/`.
+
+### Deploying this phase
+
+1. Run `0007_admin.sql` in the Supabase SQL editor (after `0001`–`0006`).
+2. Deploy the Edge Function (needs the [Supabase CLI](https://supabase.com/docs/guides/cli)):
+   ```bash
+   supabase login
+   supabase link --project-ref <your-project-ref>
+   supabase functions deploy admin-users
+   ```
+   No extra secrets to configure — `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to every Edge Function automatically by Supabase.
+3. Push the frontend changes as usual.
+
+### Why user creation/deletion/password-reset needed an Edge Function
+
+Those three actions require Supabase's **service-role Admin API**, which bypasses every RLS policy in the database — it must never be reachable with the anon key from the browser. An Edge Function is Supabase's own serverless compute (not a server you host), which is why this still fits "no server of your own." The function independently re-verifies the caller is an admin by checking their JWT against `profiles.role` itself — it does not trust a client-supplied flag — before touching anything. It also always returns HTTP 200 with an `{ok, error}` body rather than using non-2xx status codes for expected failures (bad password, not an admin, etc.), because `supabase-js`'s `functions.invoke()` doesn't reliably surface a parsed error body across versions when the status code isn't 2xx — this was a real bug I found and fixed while building it, not a hypothetical one.
+
+### Everything else is direct, RLS-gated writes — reusing the reward system
+
+Giving one trainer money/items/a Pokémon from the Users page doesn't need its own code path: it creates a one-recipient reward batch and sends it immediately, reusing the exact same atomic, audited mechanism as a broadcast reward to "all trainers." Removing money/items/a Pokémon, renaming a user, and reassigning their city/wallpaper/avatar are plain admin-gated table writes — already safe because of the RLS policies and guard triggers built in Phases 3–7.
+
+### The reward system
+
+`reward_batches` are created as `draft` and only ever move to `sent` via an explicit button press calling `send_admin_reward()` — there is no scheduling of any kind, exactly as specified. That function resolves "one/multiple/all/a city" server-side from the batch's own stored `recipient_mode`, so a recipient list can't be tampered with client-side, applies the reward to every resolved recipient, records one `reward_deliveries` row and one notification per recipient (carrying the admin's own message), and writes a single `reward_sent` entry to the activity log summarizing the whole batch.
+
+### Admin Activity Log
+
+Populated entirely by database triggers, not by the client remembering to log itself — money changes, city reassignments, Pokémon/item grants, custom item creation, and Shop listing changes are all captured automatically the moment an admin's own action reaches the database, and reward batches log one summary entry per send. `user_created` / `user_deleted` / `password_reset` are logged by the Edge Function itself, using its service-role access.
+
+### Custom items work everywhere immediately
+
+Because every part of the app (Bag, Shop, trading, notifications, admin rewards) already reads `items_catalog` generically by category rather than hardcoding a fixed item list, a brand-new `Quest`-category item created in Admin → Items is immediately tradeable, giftable, and displayable everywhere — no extra wiring needed per item.
+
+### Security review
+
+This phase's explicit ask was to review what was already built, not just add new features — here's that review, stated plainly:
+
+| A trainer must never be able to… | How it's actually prevented |
+|---|---|
+| Modify another user's money | RLS blocks the row entirely (`profiles` update requires it be your own row or you be an admin) — a trainer literally has no path to another user's row, and a guard trigger *also* locks the `money` column even on their own row |
+| Modify another user's inventory / Pokémon / PC | Same pattern: row-level RLS blocks any other user's rows outright; column-guard triggers further restrict what a trainer can change even on their own |
+| Access another user's private profile data | `profiles` SELECT is scoped to your own row or admin; search only ever queries the `trainer_directory` view, which exposes nothing but username/Trainer ID/avatar |
+| Grant themselves money | Blocked by the same column-guard trigger, regardless of caller |
+| Grant themselves items | `trainer_items` has **zero** trainer-facing insert/update policy — every increase happens only through `purchase_item`, `confirm_trade`, or `send_admin_reward`, all of which validate independently and run as trusted functions |
+| Grant themselves Pokémon | `trainer_pokemon` insert is admin-only at the RLS level; trades only ever transfer *existing* rows, never create new ones |
+| Access Admin pages | `ProtectedRoute adminOnly` redirects client-side (good UX) — but every single query and mutation the admin pages make is *independently* rejected by RLS for a non-admin regardless of which route rendered the request. Deleting the frontend check entirely would not open any real access. |
+
+Nothing here is new *policy* — Phases 3 through 7 already built this incrementally and with real rigor (see each phase's own security notes above). This phase's job was to add the same rigor to the new admin surface (rewards, activity log, user management) and confirm the rest still holds, which is what the table above reflects.
+
+### Production polish — bugs actually found and fixed this phase
+
+In the process of building this phase, I found and fixed two real issues rather than just claiming the review was clean:
+
+1. **Stale-data bug in the Manage User modal**: it held a snapshot of the trainer's profile from the moment it was opened. Giving money twice in one session would have computed the second deduction from the original (now-stale) balance. Fixed by deriving the displayed profile live from the reactive query on every render, so it's always current.
+2. **Edge Function error-surfacing bug**: described above — non-2xx responses don't reliably carry a parsed body through `supabase-js`, which would have shown generic errors instead of the specific, useful ones the function actually produces.
+
+Money and inventory integrity themselves were already handled structurally, not left to this phase to patch: every balance-affecting operation goes through an atomic function with row locks and `CHECK (… >= 0)` constraints backing it up (Phases 5–6), so negative balances/inventory and duplicated Pokémon/items were never reachable, not just "tested and found absent."
+
+One honest scope note on the dashboard stats: "Active users" is shown as accounts created in the last 7 days, since the app doesn't track last-login timestamps anywhere — it's a real, truthful number, just not literally "currently online," and it's labeled "New (7d)" in the UI to avoid overclaiming.
+
+### Final verification checklist
+
+The flows from the spec, and where to look if any of them ever break:
+
+- **Login → Lock → Unlock → Home → Bag → Back → Home**: lock state lives in `PhoneLockProvider`, decoupled from routing (Phase 2) — this is what keeps "back" from ever returning to the Lock Screen.
+- **PC → move a Pokémon → refresh → it's still there**: `trainer_pokemon.party_slot`/`box_id`/`box_slot` persist directly to Supabase on every move (Phase 4); nothing about location is ever held only in React state.
+- **Admin creates a user → they log in → admin gives money → they receive it**: covered by the Edge Function + `send_admin_reward`, both described above.
+- **Admin creates a Quest item → gives it to a user → they trade it to another user → both inventories update**: `items_catalog` is category-generic (works immediately); `trade_items` validates `is_tradable` server-side before it can even be offered (Phase 6).
+- **Trade request → accept → both select offers → both confirm → completes → both notified**: `confirm_trade()` is the single atomic transaction that makes this safe (Phase 6); notifications fire from inside that same function.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

@@ -2,6 +2,9 @@ export type UserRole = "trainer" | "admin";
 export type ItemCategory = "poke_ball" | "medicine" | "evolution" | "battle" | "key_item" | "quest" | "other";
 export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "fainted";
 export type TradeStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
+export type RewardKind = "money" | "items" | "pokemon";
+export type RewardStatus = "draft" | "sent";
+export type RewardRecipientMode = "user" | "users" | "all" | "city";
 export interface NotificationPrefs {
   trades: boolean;
   purchases: boolean;
@@ -359,6 +362,101 @@ export interface Database {
           }
         ];
       };
+      reward_batches: {
+        Row: {
+          id: string;
+          admin_id: string;
+          kind: RewardKind;
+          status: RewardStatus;
+          message: string;
+          payload: Record<string, unknown>;
+          recipient_mode: RewardRecipientMode;
+          recipient_target: Record<string, unknown>;
+          created_at: string;
+          sent_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          kind: RewardKind;
+          status?: RewardStatus;
+          message?: string;
+          payload?: Record<string, unknown>;
+          recipient_mode: RewardRecipientMode;
+          recipient_target?: Record<string, unknown>;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          admin_id?: string;
+          kind?: RewardKind;
+          status?: RewardStatus;
+          message?: string;
+          payload?: Record<string, unknown>;
+          recipient_mode?: RewardRecipientMode;
+          recipient_target?: Record<string, unknown>;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Relationships: [];
+      };
+      reward_deliveries: {
+        Row: {
+          id: string;
+          batch_id: string;
+          recipient_id: string;
+          delivered_at: string;
+        };
+        Insert: {
+          id?: string;
+          batch_id: string;
+          recipient_id: string;
+          delivered_at?: string;
+        };
+        Update: {
+          id?: string;
+          batch_id?: string;
+          recipient_id?: string;
+          delivered_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reward_deliveries_batch_id_fkey";
+            columns: ["batch_id"];
+            isOneToOne: false;
+            referencedRelation: "reward_batches";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      admin_activity_log: {
+        Row: {
+          id: string;
+          admin_id: string | null;
+          action: string;
+          target_profile_id: string | null;
+          details: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_id?: string | null;
+          action: string;
+          target_profile_id?: string | null;
+          details?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          admin_id?: string | null;
+          action?: string;
+          target_profile_id?: string | null;
+          details?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       trainer_pokemon: {
         Row: {
           id: string;
@@ -575,12 +673,19 @@ export interface Database {
         Args: { p_trade_id: string };
         Returns: void;
       };
+      send_admin_reward: {
+        Args: { p_batch_id: string };
+        Returns: number;
+      };
     };
     Enums: {
       user_role: UserRole;
       item_category: ItemCategory;
       pokemon_status: PokemonStatus;
       trade_status: TradeStatus;
+      reward_kind: RewardKind;
+      reward_status: RewardStatus;
+      reward_recipient_mode: RewardRecipientMode;
     };
   };
 }
@@ -597,6 +702,9 @@ export type ShopListingRow = Database["public"]["Tables"]["shop_listings"]["Row"
 export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type TradeRow = Database["public"]["Tables"]["trades"]["Row"];
 export type TrainerDirectoryEntry = Database["public"]["Views"]["trainer_directory"]["Row"];
+export type RewardBatch = Database["public"]["Tables"]["reward_batches"]["Row"];
+export type RewardDelivery = Database["public"]["Tables"]["reward_deliveries"]["Row"];
+export type AdminActivityLogEntry = Database["public"]["Tables"]["admin_activity_log"]["Row"];
 
 /** shop_listings joined with its item_catalog entry, as fetched by useShopListings(). */
 export interface ShopListing extends ShopListingRow {

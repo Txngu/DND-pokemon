@@ -1,4 +1,4 @@
-import { Backpack, HardDrive, ShoppingBag, ArrowLeftRight, User, Bell, Settings } from "lucide-react";
+import { Backpack, HardDrive, ShoppingBag, ArrowLeftRight, User, Bell, Settings, ShieldCheck } from "lucide-react";
 import { StatusBar, useClock } from "@/components/phone/StatusBar";
 import { AppIcon } from "@/components/phone/AppIcon";
 import { Dock } from "@/components/phone/Dock";
@@ -66,6 +66,9 @@ export function HomeScreen({ profile }: { profile: Profile }) {
             badgeCount={app.to === "/notifications" ? unreadCount : undefined}
           />
         ))}
+        {profile.role === "admin" ? (
+          <AppIcon label="Admin" to="/admin" icon={<ShieldCheck className="h-7 w-7" strokeWidth={1.75} />} />
+        ) : null}
       </div>
 
       <Dock />

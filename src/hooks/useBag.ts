@@ -2,10 +2,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
-import type { ItemCatalogEntry, TrainerItem, TrainerPokemon } from "@/types/database.types";
+import type { ItemCatalogEntry, Species, TrainerItem, TrainerPokemon } from "@/types/database.types";
 
 const POKEMON_SELECT = "*, species:species_id(*), held_item:held_item_id(*)";
 const ITEMS_SELECT = "*, item:item_id(*)";
+
+export function useSpecies() {
+  return useQuery({
+    queryKey: ["species"],
+    staleTime: Infinity,
+    queryFn: async (): Promise<Species[]> => {
+      const { data, error } = await supabase.from("species").select("*").order("id");
+      if (error) throw error;
+      return data;
+    },
+  });
+}
 
 export function useTrainerPokemon() {
   const { user } = useAuth();

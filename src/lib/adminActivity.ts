@@ -1,0 +1,15 @@
+export const ACTIVITY_LABELS: Record<string, string> = {
+  user_created: "Created a user",
+  user_deleted: "Deleted a user",
+  password_reset: "Reset a password",
+  money_added: "Gave money",
+  money_removed: "Removed money",
+  item_granted: "Granted an item",
+  item_removed: "Removed an item",
+  pokemon_granted: "Granted a Pokémon",
+  reward_sent: "Sent a reward",
+  shop_item_created: "Listed an item in the Shop",
+  shop_item_edited: "Edited a Shop listing",
+  item_created: "Created a custom item",
+  user_city_changed: "Changed a user's city",
+};
