@@ -3,10 +3,14 @@ import type { City } from "@/types/database.types";
 export interface WallpaperOption {
   key: string;
   label: string;
-  /** CSS `background` shorthand value - gradients only, no external image hosting required. */
+  /** CSS `background` value - layered gradients only, no external image hosting required. */
   css: string;
 }
 
+// Note: keys are stable identifiers stored in profiles.wallpaper and must
+// never change once shipped, even when the visual assigned to a key is
+// corrected (as happened here — see the regional theme remap in the UI
+// redesign notes). Only the `css`/`label` values change.
 export const WALLPAPER_OPTIONS: WallpaperOption[] = [
   {
     key: "default-dusk",
@@ -16,22 +20,34 @@ export const WALLPAPER_OPTIONS: WallpaperOption[] = [
   {
     key: "harmonia-castle",
     label: "Harmonia Castle",
-    css: "radial-gradient(140% 100% at 50% 0%, #4a72e8 0%, #23408f 45%, #0d1b3d 100%)",
+    css: [
+      "radial-gradient(60% 40% at 50% 0%, rgba(212,175,55,0.35) 0%, transparent 70%)",
+      "radial-gradient(140% 100% at 50% 0%, #4a72e8 0%, #23408f 45%, #0d1b3d 100%)",
+    ].join(", "),
   },
   {
     key: "blutenhain-bloom",
-    label: "Blütenhain Bloom",
-    css: "radial-gradient(140% 100% at 50% 0%, #4fd0c0 0%, #1f6e63 45%, #0c211e 100%)",
+    label: "Blütenhain Twilight",
+    css: [
+      "linear-gradient(135deg, rgba(166,28,28,0.25) 0%, transparent 45%)",
+      "radial-gradient(140% 100% at 50% 0%, #7a2323 0%, #2c1010 45%, #0a0606 100%)",
+    ].join(", "),
   },
   {
     key: "windcity-autumn",
-    label: "Wind City Autumn",
-    css: "radial-gradient(140% 100% at 50% 0%, #d9695f 0%, #7a2c26 45%, #221211 100%)",
+    label: "Wind City Skies",
+    css: [
+      "radial-gradient(50% 35% at 70% 10%, rgba(255,255,255,0.25) 0%, transparent 70%)",
+      "radial-gradient(140% 100% at 50% 0%, #8fd0ee 0%, #3e86b8 45%, #16324a 100%)",
+    ].join(", "),
   },
   {
     key: "crystalcity-night",
     label: "Crystal City Night",
-    css: "radial-gradient(140% 100% at 50% 0%, #9d8cff 0%, #4a3d99 45%, #120f28 100%)",
+    css: [
+      "radial-gradient(50% 40% at 30% 5%, rgba(201,214,255,0.3) 0%, transparent 70%)",
+      "radial-gradient(140% 100% at 50% 0%, #7c8fff 0%, #3b3d99 45%, #0e0f28 100%)",
+    ].join(", "),
   },
   {
     key: "volt-spark",

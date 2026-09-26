@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
+import { RegionalThemeProvider } from "@/hooks/useRegionalTheme";
 import { toast } from "@/lib/toast";
 import App from "@/App";
 import "@/index.css";
@@ -29,7 +30,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <HashRouter>
         <AuthProvider>
-          <App />
+          <RegionalThemeProvider cityThemeKey={null}>
+            <App />
+          </RegionalThemeProvider>
         </AuthProvider>
       </HashRouter>
     </QueryClientProvider>

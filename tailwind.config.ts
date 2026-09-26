@@ -1,6 +1,21 @@
 import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
+/**
+ * Standard Tailwind pattern for a color driven by a CSS custom property
+ * while still supporting the `/opacity` modifier (bg-volt/30, text-volt/60,
+ * ...), which is used extensively throughout the app. The CSS variable must
+ * hold space-separated RGB channels ("59 95 204"), not a hex string - see
+ * themeCssVars() in src/lib/regionalThemes.ts, which is what actually sets
+ * these variables at runtime based on the trainer's city.
+ */
+function withOpacity(cssVar: string, fallbackRgb: string) {
+  return ({ opacityValue }: { opacityValue?: string }) =>
+    opacityValue === undefined
+      ? `rgb(var(${cssVar}, ${fallbackRgb}))`
+      : `rgb(var(${cssVar}, ${fallbackRgb}) / ${opacityValue})`;
+}
+
 export default {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -48,7 +63,8 @@ export default {
           surface: "#242145",
         },
         volt: {
-          DEFAULT: "#FFD23F",
+          DEFAULT: withOpacity("--theme-primary-rgb", "255 210 63"),
+          light: withOpacity("--theme-primary-light-rgb", "255 226 122"),
           dim: "#C79E1F",
         },
         circuit: {
@@ -58,7 +74,7 @@ export default {
         mist: "#EDEBFF",
       },
       fontFamily: {
-        display: ["'Rubik'", "sans-serif"],
+        display: ["'Playfair Display'", "serif"],
         sans: ["'Inter'", "sans-serif"],
         mono: ["'JetBrains Mono'", "monospace"],
       },
@@ -95,10 +111,15 @@ export default {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
         "float-slow": "float-slow 4s ease-in-out infinite",
         "pulse-glow": "pulse-glow 2.4s ease-in-out infinite",
+        shimmer: "shimmer 3.5s linear infinite",
       },
     },
   },

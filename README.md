@@ -330,6 +330,43 @@ The flows from the spec, and where to look if any of them ever break:
 - **Admin creates a Quest item → gives it to a user → they trade it to another user → both inventories update**: `items_catalog` is category-generic (works immediately); `trade_items` validates `is_tradable` server-side before it can even be offered (Phase 6).
 - **Trade request → accept → both select offers → both confirm → completes → both notified**: `confirm_trade()` is the single atomic transaction that makes this safe (Phase 6); notifications fire from inside that same function.
 
+## UI Redesign: Regional Theme System
+
+A visual-only overhaul — no database or Supabase logic changed. Every trainer's assigned city now drives a full regional visual identity across the phone.
+
+### Corrected regional mapping
+
+This redesign's brief reassigned two regions from how Phase 7 had originally styled them. Fixed here, with no database change needed (see below for why):
+
+| City | Region | Palette | Emblem |
+|---|---|---|---|
+| Harmonia City | Rowan Eldoria | Royal blue & gold | Compass |
+| Wind City | Wong Lu | Sky blue & white stone | Wing |
+| Blütenhain | Kian Kurose | Crimson & black | Maple leaf |
+| Crystal City | Orion Lumos | Sapphire & indigo | Crystal |
+
+### How theming works, with zero database changes
+
+`cities.theme_key` (from Phase 7) already uniquely identifies each city correctly — the fix needed was purely in how the *client* interprets that key, not the data itself. `src/lib/regionalThemes.ts` is a small, fully client-side registry mapping each `theme_key` to a complete theme object (colors, phone bezel gradient, header divider gradient, emblem glow). `RegionalThemeProvider` (`src/hooks/useRegionalTheme.tsx`) reads the trainer's city and provides that theme via context to the whole phone; the whole app is wrapped in a `default` theme at the root (`main.tsx`) so Login/404 (which render outside any authenticated city context) never crash, with `PhoneLayout` nesting a more specific provider once a trainer's city is known.
+
+**The highest-leverage single change**: rather than hand-editing the dozens of components across all 8 prior phases that already use `bg-volt`/`text-volt`/`border-volt` (the app's primary accent color throughout), `volt` itself now resolves through the same CSS variable the active theme sets (`tailwind.config.ts`, using Tailwind's documented CSS-variable-with-opacity pattern so `/opacity` modifiers like `bg-volt/30` — used extensively already — keep working). Every existing use of `volt` anywhere in the app is now theme-reactive automatically, with no other file needing to change. The Admin Dashboard, which renders entirely outside `PhoneFrame`'s context, correctly falls back to the original yellow via the CSS variable's fallback value — appropriate, since Phase 8 deliberately kept Admin a conventional, non-regional dashboard.
+
+I hit and fixed one real build break while wiring this up: a first pass set `--theme-primary` to a hex string, which silently breaks Tailwind's opacity-modifier syntax (`bg-volt/30`) because that requires the CSS variable to hold space-separated RGB channels, not hex — caught by an actual `npm run build`, not just `tsc`, since it's a CSS-generation-time issue invisible to the type checker.
+
+### What changed deeply vs. what inherits by cascade
+
+Deeply redesigned, not just recolored:
+- **`PhoneFrame`** — the phone "hardware" itself: regional bezel gradient, a jeweled emblem ornament replacing the old plain camera dot, a themed bottom decoration, region-tinted side buttons, and responsive `clamp()`-based sizing (`.phone-shell` in `index.css`) so desktop shows a real ~360–540px phone rather than either a tiny fixed mockup or a stretched dashboard.
+- **Lock Screen** — a glass-blurred panel behind the clock (readable over any wallpaper), the regional emblem, a theme-glow ring on the avatar.
+- **App headers** (`AppScreenHeader`) — every screen's header now shows the regional emblem and a theme-gradient divider.
+- **Buttons** — primary actions are a theme-colored glowing pill; secondary stayed frosted glass; danger is a crimson gradient (`src/components/ui/button.tsx`).
+- **Profile**, redesigned as an actual Trainer Card with corner emblem decoration and an accent ring around the portrait.
+- **Home Screen** — regional emblem badge, theme-glow avatar ring, and a few icons swapped for closer Pokémon-world equivalents (PC → terminal icon, Profile → ID card, Notifications → signal icon).
+
+Inherits the new look automatically, by construction, without being individually rewritten: every card in the Bag, Shop, and Trade lists (they all share `PokemonCard`/`ItemRow`/`ShopItemCard`/`TradeListItem`, each now carrying a `theme-accent-line` left border), and anything using the shared `Button` component or the `volt` color anywhere.
+
+**Honest scope boundary**: I did not restructure the layout of Bag/PC/Shop/Trade/Settings/Notifications (a literal "category sidebar" for Bag, for instance, isn't built) — the brief was explicit that "the layout stays identical," and doing full bespoke visual passes on every individual screen beyond the shared components above was more than this iteration could respect that constraint *and* stay reliable. What's here is a real, working, verified-by-build theme system plus deep treatment of the screens a trainer sees most (lock, home, headers, profile, buttons, cards) — a solid foundation to extend screen-by-screen from here if you want more.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

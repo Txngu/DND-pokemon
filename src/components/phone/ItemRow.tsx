@@ -3,7 +3,7 @@ import type { TrainerItem } from "@/types/database.types";
 
 export function ItemRow({ entry }: { entry: TrainerItem }) {
   return (
-    <div className="glass flex items-center gap-3 rounded-2xl p-3 shadow-glass">
+    <div className="glass theme-accent-line flex items-center gap-3 rounded-2xl p-3 shadow-glass">
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5">
         <ItemIcon item={entry.item} className="h-8 w-8" />
       </div>

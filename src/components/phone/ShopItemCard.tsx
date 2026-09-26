@@ -5,7 +5,7 @@ export function ShopItemCard({ listing, onBuy }: { listing: ShopListing; onBuy: 
   const soldOut = listing.stock !== null && listing.stock <= 0;
 
   return (
-    <div className="glass flex items-center gap-3 rounded-2xl p-3 shadow-glass">
+    <div className="glass theme-accent-line flex items-center gap-3 rounded-2xl p-3 shadow-glass">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5">
         <ItemIcon item={listing.item} className="h-9 w-9" />
       </div>

@@ -30,10 +30,14 @@ export function AppIcon({ label, to, icon, gradient, className, badgeCount }: Ap
     >
       <motion.div
         whileTap={{ scale: 0.88 }}
+        whileHover={{ y: -2 }}
         animate={opening ? { scale: [1, 0.85, 22], opacity: [1, 1, 0] } : { scale: 1, opacity: 1 }}
         transition={opening ? { duration: 0.42, times: [0, 0.25, 1], ease: "easeIn" } : { type: "spring", stiffness: 500, damping: 25 }}
+        style={{
+          background: "linear-gradient(160deg, rgb(var(--theme-primary-rgb, 255 210 63) / 0.16), rgb(var(--theme-primary-rgb, 255 210 63) / 0.03))",
+        }}
         className={cn(
-          "glass relative flex h-16 w-16 items-center justify-center rounded-2xl text-mist shadow-glass",
+          "glass relative flex h-16 w-16 items-center justify-center rounded-2xl text-[var(--theme-primary-light)] shadow-glass",
           gradient
         )}
       >

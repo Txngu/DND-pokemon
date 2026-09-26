@@ -27,7 +27,7 @@ export function TradeListItem({ entry, onClick }: { entry: TradeListEntry; onCli
     <button
       type="button"
       onClick={onClick}
-      className="glass flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left shadow-glass active:bg-white/10"
+      className="glass theme-accent-line flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left shadow-glass active:bg-white/10"
     >
       <Avatar className="h-10 w-10">
         {entry.otherTrainer.avatar ? <AvatarImage src={entry.otherTrainer.avatar} alt={entry.otherTrainer.username} /> : null}

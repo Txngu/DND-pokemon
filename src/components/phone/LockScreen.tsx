@@ -2,6 +2,8 @@ import { motion, useAnimation, type PanInfo } from "framer-motion";
 import { ChevronUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useClock } from "@/components/phone/StatusBar";
+import { useRegionalTheme } from "@/hooks/useRegionalTheme";
+import { RegionalEmblem } from "@/components/theme/Emblems";
 
 interface LockScreenProps {
   avatar?: string | null;
@@ -12,6 +14,7 @@ interface LockScreenProps {
 export function LockScreen({ avatar, username, onUnlock }: LockScreenProps) {
   const now = useClock();
   const controls = useAnimation();
+  const theme = useRegionalTheme();
   const initials = username.slice(0, 2).toUpperCase();
 
   const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -33,15 +36,26 @@ export function LockScreen({ avatar, username, onUnlock }: LockScreenProps) {
       dragElastic={0.15}
       onDragEnd={handleDragEnd}
       animate={controls}
-      className="relative z-10 flex h-full w-full flex-col items-center justify-between bg-gradient-to-b from-screen-deep/40 via-screen-ink/60 to-screen-ink py-10 select-none"
+      className="relative z-10 flex h-full w-full flex-col items-center justify-between py-10 select-none"
     >
-      <div className="flex flex-col items-center gap-1 pt-6">
-        <span className="font-display text-6xl font-semibold tracking-tight text-mist text-glow">{time}</span>
-        <span className="font-sans text-sm text-mist/70">{date}</span>
+      {/* Regional city emblem, faint, top of the lock screen */}
+      <div className="flex flex-col items-center gap-3 pt-4">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full"
+          style={{ background: theme.emblemGlow }}
+        >
+          <RegionalEmblem themeKey={theme.key} className="h-6 w-6" style={{ color: theme.colors.secondary }} />
+        </div>
+
+        {/* Glass panel behind the clock for legibility over any wallpaper */}
+        <div className="glass-premium mt-2 flex flex-col items-center gap-1 rounded-3xl px-8 py-5">
+          <span className="font-display text-6xl font-semibold tracking-tight text-mist text-glow">{time}</span>
+          <span className="font-sans text-sm text-mist/70">{date}</span>
+        </div>
       </div>
 
       <div className="flex flex-col items-center gap-3">
-        <Avatar className="h-16 w-16 ring-2 ring-volt/60">
+        <Avatar className="h-16 w-16 theme-glow-ring">
           {avatar ? <AvatarImage src={avatar} alt={username} /> : null}
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>

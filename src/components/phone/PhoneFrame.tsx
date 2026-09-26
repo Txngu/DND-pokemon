@@ -1,5 +1,8 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useRegionalTheme } from "@/hooks/useRegionalTheme";
+import { RegionalEmblem } from "@/components/theme/Emblems";
+import { themeCssVars } from "@/lib/regionalThemes";
 
 interface ResolvedWallpaper {
   kind: "css" | "image";
@@ -9,29 +12,31 @@ interface ResolvedWallpaper {
 interface PhoneFrameProps {
   children: React.ReactNode;
   wallpaper?: ResolvedWallpaper | null;
-  accentColor?: string | null;
   className?: string;
 }
 
 /**
- * The physical Rotom Phone chrome: a red bezel with a single glowing "eye"
- * camera dot, wrapping a dark rounded screen viewport.
+ * The physical PokéGear chrome — a regional-collectible smartphone. The
+ * bezel gradient, top emblem ornament, bottom decoration, and side-button
+ * accent all repaint automatically from the active RegionalTheme (read from
+ * context, provided by PhoneLayout based on the trainer's city), wrapping
+ * the same dark screen viewport every app renders into.
  *
- * Responsive behaviour: on real phone-sized viewports (< sm breakpoint) the
- * "phone within a phone" bezel would just waste screen space, so the frame
- * goes full-bleed and behaves like a native app. From the sm breakpoint up
- * (tablet, laptop, desktop) it renders as a fixed-size phone mockup centered
- * on an ambient background, so it still reads as a smartphone rather than a
- * stretched dashboard.
+ * Responsive: on real phone-sized viewports (< sm) the bezel would waste
+ * screen space, so the frame goes full-bleed and behaves like a native app.
+ * From sm up it renders as a fixed-proportion phone mockup (clamp-sized,
+ * ~360–540px, see .phone-shell in index.css) centered on an ambient
+ * background, so it never looks like a stretched dashboard and never
+ * shrinks to a tiny, hard-to-use mockup on desktop.
  *
- * Readability: no matter which wallpaper is active, a fixed dark scrim sits
- * between the wallpaper and all screen content, so text and icons stay
- * legible regardless of how bright or busy the chosen wallpaper is.
+ * Readability: a fixed dark scrim sits between the wallpaper and all screen
+ * content regardless of theme, so text and icons stay legible on every
+ * region's wallpaper.
  */
-export function PhoneFrame({ children, wallpaper, accentColor, className }: PhoneFrameProps) {
-  const screenStyle: React.CSSProperties = {
-    ...(accentColor ? ({ "--city-accent": accentColor } as React.CSSProperties) : {}),
-  };
+export function PhoneFrame({ children, wallpaper, className }: PhoneFrameProps) {
+  const theme = useRegionalTheme();
+
+  const screenStyle: React.CSSProperties = { ...themeCssVars(theme) };
   if (wallpaper?.kind === "image") {
     screenStyle.backgroundImage = `url(${wallpaper.value})`;
     screenStyle.backgroundSize = "cover";
@@ -44,27 +49,57 @@ export function PhoneFrame({ children, wallpaper, accentColor, className }: Phon
     <div className="flex min-h-[100dvh] w-full items-center justify-center bg-rotom-gradient sm:px-4 sm:py-8">
       <div
         className={cn(
-          "relative flex h-[100dvh] w-full flex-col rounded-none bg-gradient-to-b from-rotom-red to-rotom-red-dark p-0 shadow-none",
-          "sm:h-[780px] sm:max-h-[92vh] sm:w-[380px] sm:max-w-[92vw] sm:rounded-phone sm:p-3 sm:shadow-phone-bezel",
+          "phone-shell relative flex h-[100dvh] w-full flex-col rounded-none p-0 shadow-none",
+          "sm:rounded-phone sm:p-3 sm:shadow-phone-bezel",
           className
         )}
+        style={{ background: theme.bezelGradient }}
       >
-        {/* Rotom "eye" — only shown when the bezel itself is visible */}
-        <div className="absolute left-1/2 top-5 z-20 hidden -translate-x-1/2 items-center gap-1.5 sm:flex">
-          <span className="h-2 w-2 animate-pulse-glow rounded-full bg-volt shadow-[0_0_10px_2px_rgba(255,210,63,0.7)]" />
+        {/* Regional emblem ornament, replacing a generic camera dot */}
+        <div className="absolute left-1/2 top-3 z-20 hidden -translate-x-1/2 sm:block">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+            style={{ background: theme.emblemGlow }}
+          >
+            <RegionalEmblem
+              themeKey={theme.key}
+              className="h-5 w-5 drop-shadow-[0_0_4px_rgba(0,0,0,0.4)]"
+              style={{ color: theme.colors.secondary }}
+            />
+          </div>
         </div>
 
         {/* Screen */}
-        <div className="relative flex-1 overflow-hidden rounded-none bg-screen-ink shadow-inner sm:rounded-screen" style={screenStyle}>
+        <div
+          className="relative mt-0 flex-1 overflow-hidden rounded-none bg-screen-ink shadow-inner sm:mt-8 sm:rounded-screen"
+          style={screenStyle}
+        >
           <div className="absolute inset-0 bg-screen-noise" />
           <div className="absolute inset-0 bg-gradient-to-b from-screen-ink/25 via-transparent to-screen-ink/70" />
           <div className="relative z-10 flex h-full flex-col">{children}</div>
         </div>
 
-        {/* Side buttons (decorative, desktop mockup only) */}
-        <div className="absolute -right-[3px] top-28 hidden h-14 w-[3px] rounded-l-full bg-black/30 sm:block" />
-        <div className="absolute -left-[3px] top-24 hidden h-10 w-[3px] rounded-r-full bg-black/30 sm:block" />
-        <div className="absolute -left-[3px] top-40 hidden h-10 w-[3px] rounded-r-full bg-black/30 sm:block" />
+        {/* Bottom ornament (desktop mockup only) */}
+        <div className="mt-2 hidden justify-center sm:flex">
+          <div
+            className="h-1.5 w-10 rounded-full opacity-70"
+            style={{ background: `linear-gradient(90deg, transparent, ${theme.colors.secondary}, transparent)` }}
+          />
+        </div>
+
+        {/* Side buttons, tinted by region */}
+        <div
+          className="absolute -right-[3px] top-28 hidden h-14 w-[3px] rounded-l-full sm:block"
+          style={{ background: theme.colors.primaryLight, opacity: 0.7 }}
+        />
+        <div
+          className="absolute -left-[3px] top-24 hidden h-10 w-[3px] rounded-r-full sm:block"
+          style={{ background: theme.colors.primaryLight, opacity: 0.7 }}
+        />
+        <div
+          className="absolute -left-[3px] top-40 hidden h-10 w-[3px] rounded-r-full sm:block"
+          style={{ background: theme.colors.primaryLight, opacity: 0.7 }}
+        />
       </div>
     </div>
   );

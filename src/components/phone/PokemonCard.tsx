@@ -14,7 +14,7 @@ export function PokemonCard({ pokemon, onClick }: { pokemon: TrainerPokemon; onC
       type="button"
       onClick={onClick}
       whileTap={{ scale: 0.97 }}
-      className="glass flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left shadow-glass active:bg-white/10"
+      className="glass theme-accent-line flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left shadow-glass active:bg-white/10"
     >
       <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/5">
         <SpriteImage

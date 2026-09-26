@@ -5,6 +5,7 @@ import { AnimatedOutlet } from "@/components/phone/AnimatedOutlet";
 import { ToastViewport } from "@/components/phone/ToastViewport";
 import { useProfile, useCities } from "@/hooks/useProfile";
 import { usePhoneLock } from "@/hooks/usePhoneLock";
+import { RegionalThemeProvider } from "@/hooks/useRegionalTheme";
 import { resolveWallpaper } from "@/lib/cityThemes";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -15,6 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton";
  * the "back button sends you to the Lock Screen" bug: routing between apps
  * no longer touches lock state at all, and the Lock Screen is never part of
  * the app navigation stack.
+ *
+ * The trainer's city drives a nested RegionalThemeProvider here, overriding
+ * the app-wide default one (see main.tsx) for every screen inside the phone.
  */
 export function PhoneLayout() {
   const { data: profile, isLoading } = useProfile();
@@ -31,19 +35,21 @@ export function PhoneLayout() {
   }
 
   return (
-    <PhoneFrame wallpaper={wallpaper} accentColor={city?.accent_color}>
-      {isLoading || !profile ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-          <Skeleton className="h-16 w-16 rounded-full" />
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-24" />
-        </div>
-      ) : locked ? (
-        <LockScreen avatar={profile.avatar} username={profile.username} onUnlock={handleUnlock} />
-      ) : (
-        <AnimatedOutlet profile={profile} />
-      )}
-      <ToastViewport />
-    </PhoneFrame>
+    <RegionalThemeProvider cityThemeKey={city?.theme_key}>
+      <PhoneFrame wallpaper={wallpaper}>
+        {isLoading || !profile ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
+            <Skeleton className="h-16 w-16 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        ) : locked ? (
+          <LockScreen avatar={profile.avatar} username={profile.username} onUnlock={handleUnlock} />
+        ) : (
+          <AnimatedOutlet profile={profile} />
+        )}
+        <ToastViewport />
+      </PhoneFrame>
+    </RegionalThemeProvider>
   );
 }

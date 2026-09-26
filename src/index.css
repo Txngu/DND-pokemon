@@ -68,4 +68,23 @@
   .text-glow {
     text-shadow: 0 0 18px rgba(255, 210, 63, 0.45);
   }
+  .glass-premium {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .theme-accent-line {
+    border-left: 2px solid var(--theme-primary, #ffd23f);
+  }
+  .theme-glow-ring {
+    box-shadow: 0 0 0 2px var(--theme-primary, #ffd23f), 0 0 24px 2px color-mix(in srgb, var(--theme-primary, #ffd23f) 45%, transparent);
+  }
+}
+
+@media (min-width: 640px) {
+  .phone-shell {
+    width: clamp(360px, 38vw, 540px);
+    height: clamp(660px, 86vh, 820px);
+  }
 }
