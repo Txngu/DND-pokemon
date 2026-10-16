@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Bell, ShoppingBag, ArrowLeftRight, Gift, Package, ShieldCheck, Info, CheckCheck, Trash2, X } from "lucide-react";
+import { Bell, ShoppingBag, ArrowLeftRight, Gift, Package, ShieldCheck, Info, CheckCheck, Trash2, X, Skull, HeartPulse, Sparkles, TrendingUp, Swords } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +31,11 @@ function iconFor(kind: string) {
   if (kind === "pokemon_received") return <Gift className="h-4 w-4" />;
   if (kind === "item_received") return <Package className="h-4 w-4" />;
   if (kind === "admin_reward") return <ShieldCheck className="h-4 w-4" />;
+  if (kind === "evolution") return <Sparkles className="h-4 w-4" />;
+  if (kind === "level_up" || kind === "xp_gained") return <TrendingUp className="h-4 w-4" />;
+  if (kind === "fainted" || kind === "pokemon_died") return <Skull className="h-4 w-4" />;
+  if (kind === "healed" || kind === "revived") return <HeartPulse className="h-4 w-4" />;
+  if (kind === "battle_ended") return <Swords className="h-4 w-4" />;
   return <Info className="h-4 w-4" />;
 }
 

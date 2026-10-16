@@ -5,6 +5,9 @@ export type TradeStatus = "pending" | "accepted" | "declined" | "cancelled" | "c
 export type RewardKind = "money" | "items" | "pokemon";
 export type RewardStatus = "draft" | "sent";
 export type RewardRecipientMode = "user" | "users" | "all" | "city";
+export type EvolutionMethod = "level" | "item" | "held_item" | "trade" | "friendship" | "custom";
+export type BattleStatus = "active" | "ended";
+export type BattleTargetType = "trainer_pokemon" | "enemy";
 export interface NotificationPrefs {
   trades: boolean;
   purchases: boolean;
@@ -475,6 +478,9 @@ export interface Database {
           party_slot: number | null;
           box_id: string | null;
           box_slot: number | null;
+          xp: number;
+          is_dead: boolean;
+          is_shiny: boolean;
         };
         Insert: {
           id?: string;
@@ -493,6 +499,9 @@ export interface Database {
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
+          xp?: number;
+          is_dead?: boolean;
+          is_shiny?: boolean;
         };
         Update: {
           id?: string;
@@ -511,6 +520,9 @@ export interface Database {
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
+          xp?: number;
+          is_dead?: boolean;
+          is_shiny?: boolean;
         };
         Relationships: [
           {
@@ -574,6 +586,153 @@ export interface Database {
             referencedColumns: ["id"];
           }
         ];
+      };
+      game_config: {
+        Row: { key: string; value: unknown; description: string | null };
+        Insert: { key: string; value: unknown; description?: string | null };
+        Update: { key?: string; value?: unknown; description?: string | null };
+        Relationships: [];
+      };
+      evolution_rules: {
+        Row: {
+          id: string;
+          from_species_id: number;
+          to_species_id: number;
+          method: EvolutionMethod;
+          level_required: number | null;
+          item_id: string | null;
+          notes: string | null;
+        };
+        Insert: {
+          id?: string;
+          from_species_id: number;
+          to_species_id: number;
+          method: EvolutionMethod;
+          level_required?: number | null;
+          item_id?: string | null;
+          notes?: string | null;
+        };
+        Update: {
+          id?: string;
+          from_species_id?: number;
+          to_species_id?: number;
+          method?: EvolutionMethod;
+          level_required?: number | null;
+          item_id?: string | null;
+          notes?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "evolution_rules_from_species_id_fkey";
+            columns: ["from_species_id"];
+            isOneToOne: false;
+            referencedRelation: "species";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "evolution_rules_to_species_id_fkey";
+            columns: ["to_species_id"];
+            isOneToOne: false;
+            referencedRelation: "species";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      battle_encounters: {
+        Row: {
+          id: string;
+          name: string;
+          enemy_name: string;
+          enemy_species_id: number | null;
+          enemy_sprite_url: string | null;
+          level: number;
+          current_kp: number;
+          max_kp: number;
+          notes: string | null;
+          status: BattleStatus;
+          created_by: string | null;
+          created_at: string;
+          ended_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          enemy_name: string;
+          enemy_species_id?: number | null;
+          enemy_sprite_url?: string | null;
+          level?: number;
+          current_kp: number;
+          max_kp: number;
+          notes?: string | null;
+          status?: BattleStatus;
+          created_by?: string | null;
+          created_at?: string;
+          ended_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          enemy_name?: string;
+          enemy_species_id?: number | null;
+          enemy_sprite_url?: string | null;
+          level?: number;
+          current_kp?: number;
+          max_kp?: number;
+          notes?: string | null;
+          status?: BattleStatus;
+          created_by?: string | null;
+          created_at?: string;
+          ended_at?: string | null;
+        };
+        Relationships: [];
+      };
+      battle_participants: {
+        Row: { id: string; encounter_id: string; pokemon_id: string; profile_id: string; joined_at: string };
+        Insert: { id?: string; encounter_id: string; pokemon_id: string; profile_id: string; joined_at?: string };
+        Update: { id?: string; encounter_id?: string; pokemon_id?: string; profile_id?: string; joined_at?: string };
+        Relationships: [];
+      };
+      battle_logs: {
+        Row: {
+          id: string;
+          encounter_id: string | null;
+          target_type: BattleTargetType;
+          target_pokemon_id: string | null;
+          target_label: string;
+          previous_kp: number;
+          new_kp: number;
+          delta: number;
+          author_id: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          encounter_id?: string | null;
+          target_type: BattleTargetType;
+          target_pokemon_id?: string | null;
+          target_label: string;
+          previous_kp: number;
+          new_kp: number;
+          delta: number;
+          author_id?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          encounter_id?: string | null;
+          target_type?: BattleTargetType;
+          target_pokemon_id?: string | null;
+          target_label?: string;
+          previous_kp?: number;
+          new_kp?: number;
+          delta?: number;
+          author_id?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       trainer_items: {
         Row: {
@@ -677,6 +836,42 @@ export interface Database {
         Args: { p_batch_id: string };
         Returns: number;
       };
+      adjust_pokemon_kp: {
+        Args: { p_pokemon_id: string; p_delta: number; p_note?: string | null; p_encounter_id?: string | null };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      heal_pokemon: {
+        Args: { p_pokemon_id: string };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      revive_pokemon: {
+        Args: { p_pokemon_id: string };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      admin_set_pokemon_dead: {
+        Args: { p_pokemon_id: string; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      grant_pokemon_xp: {
+        Args: { p_pokemon_id: string; p_amount: number; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      evolve_with_item: {
+        Args: { p_pokemon_id: string; p_rule_id: string };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      join_battle: {
+        Args: { p_encounter_id: string; p_pokemon_id: string };
+        Returns: void;
+      };
+      admin_adjust_enemy_kp: {
+        Args: { p_encounter_id: string; p_delta: number; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["battle_encounters"]["Row"];
+      };
+      admin_end_encounter: {
+        Args: { p_encounter_id: string };
+        Returns: void;
+      };
     };
     Enums: {
       user_role: UserRole;
@@ -686,6 +881,7 @@ export interface Database {
       reward_kind: RewardKind;
       reward_status: RewardStatus;
       reward_recipient_mode: RewardRecipientMode;
+      evolution_method: EvolutionMethod;
     };
   };
 }
@@ -741,4 +937,23 @@ export interface TradeListEntry extends TradeRow {
 /** trainer_items joined with its catalog entry, as fetched by useTrainerItems(). */
 export interface TrainerItem extends TrainerItemRow {
   item: ItemCatalogEntry;
+}
+
+export type GameConfigRow = Database["public"]["Tables"]["game_config"]["Row"];
+export type EvolutionRuleRow = Database["public"]["Tables"]["evolution_rules"]["Row"];
+export type BattleEncounter = Database["public"]["Tables"]["battle_encounters"]["Row"];
+export type BattleParticipantRow = Database["public"]["Tables"]["battle_participants"]["Row"];
+export type BattleLogRow = Database["public"]["Tables"]["battle_logs"]["Row"];
+
+/** An evolution rule joined with both species' names and the required item (if any). */
+export interface EvolutionRule extends EvolutionRuleRow {
+  from_species: Species;
+  to_species: Species;
+  item: ItemCatalogEntry | null;
+}
+
+/** A battle participant joined with its Pokémon and trainer. */
+export interface BattleParticipant extends BattleParticipantRow {
+  pokemon: TrainerPokemon;
+  trainer: TrainerDirectoryEntry;
 }
