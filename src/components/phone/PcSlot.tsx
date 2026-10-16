@@ -45,7 +45,7 @@ export function PcSlot({ slotId, pokemon, isSelected, onTap }: PcSlotProps) {
           <SpriteImage
             src={pokemonSpriteUrl(pokemon.species_id)}
             alt={pokemon.species.name}
-            className="h-8 w-8"
+            className={cn("h-8 w-8", (pokemon.is_dead || pokemon.status === "fainted") && "opacity-40 grayscale")}
             fallbackClassName="h-8 w-8"
           />
           <span className="absolute bottom-0.5 right-1 font-mono text-[8px] text-mist/70">Lv{pokemon.level}</span>

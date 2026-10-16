@@ -35,6 +35,9 @@ export default function AdminRewards() {
   const [pkAbility, setPkAbility] = React.useState("");
   const [pkHeldItem, setPkHeldItem] = React.useState("");
   const [pkMaxHp, setPkMaxHp] = React.useState("20");
+  const [pkCurrentHp, setPkCurrentHp] = React.useState("");
+  const [pkXp, setPkXp] = React.useState("0");
+  const [pkShiny, setPkShiny] = React.useState(false);
   const [pkStatus, setPkStatus] = React.useState("healthy");
 
   function buildPayload(): Record<string, unknown> {
@@ -53,6 +56,9 @@ export default function AdminRewards() {
       ability: pkAbility.trim() || "Unknown",
       held_item_id: pkHeldItem || null,
       max_hp: Math.max(1, Number(pkMaxHp) || 20),
+      current_hp: pkCurrentHp.trim() ? Math.max(0, Number(pkCurrentHp) || 0) : undefined,
+      xp: Math.max(0, Number(pkXp) || 0),
+      is_shiny: pkShiny,
       status: pkStatus,
     };
   }
@@ -186,8 +192,22 @@ export default function AdminRewards() {
               </select>
             </div>
             <div>
-              <label className={adminLabel}>Max HP</label>
+              <label className={adminLabel}>Max KP</label>
               <input className={adminInput} inputMode="numeric" value={pkMaxHp} onChange={(e) => setPkMaxHp(e.target.value)} />
+            </div>
+            <div>
+              <label className={adminLabel}>Current KP (blank = full)</label>
+              <input className={adminInput} inputMode="numeric" value={pkCurrentHp} onChange={(e) => setPkCurrentHp(e.target.value)} placeholder="Full" />
+            </div>
+            <div>
+              <label className={adminLabel}>Starting XP</label>
+              <input className={adminInput} inputMode="numeric" value={pkXp} onChange={(e) => setPkXp(e.target.value)} />
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-1.5 text-sm text-slate-300">
+                <input type="checkbox" checked={pkShiny} onChange={(e) => setPkShiny(e.target.checked)} className="h-4 w-4 accent-volt" />
+                Shiny
+              </label>
             </div>
             <div>
               <label className={adminLabel}>Status</label>

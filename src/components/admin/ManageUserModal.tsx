@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Trash2, ShieldAlert } from "lucide-react";
+import { Trash2, ShieldAlert, Skull } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { adminInput, adminLabel, adminButtonPrimary, adminButtonSecondary, adminButtonDanger } from "@/components/admin/adminStyles";
@@ -21,7 +21,8 @@ import {
   useAdminResetPassword,
   useAllItemsCatalog,
 } from "@/hooks/useAdmin";
-import type { Profile } from "@/types/database.types";
+import { useAdminSetPokemonDead } from "@/hooks/useBattle";
+import type { Profile, TrainerPokemon } from "@/types/database.types";
 
 export function ManageUserModal({
   profile,
@@ -56,6 +57,9 @@ export function ManageUserModal({
   const [givePokemonLevel, setGivePokemonLevel] = React.useState("5");
   const [givePokemonNature, setGivePokemonNature] = React.useState("Hardy");
   const [givePokemonAbility, setGivePokemonAbility] = React.useState("");
+  const [givePokemonShiny, setGivePokemonShiny] = React.useState(false);
+  const [deadTarget, setDeadTarget] = React.useState<TrainerPokemon | null>(null);
+  const setDead = useAdminSetPokemonDead();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [newPassword, setNewPassword] = React.useState("");
 
@@ -110,6 +114,7 @@ export function ManageUserModal({
           nature: givePokemonNature,
           ability: givePokemonAbility.trim() || "Unknown",
           max_hp: Math.max(1, Number(givePokemonLevel) * 3 + 10),
+          is_shiny: givePokemonShiny,
         },
         profileId: profile.id,
         adminId,
@@ -215,9 +220,17 @@ export function ManageUserModal({
                 <SpriteImage src={pokemonSpriteUrl(p.species_id)} alt={p.species.name} className="h-6 w-6" fallbackClassName="h-6 w-6" />
                 <span className="flex-1 text-xs text-slate-200">
                   {p.nickname || p.species.name} · Lv{p.level}
+                  {p.is_shiny ? " ✨" : ""}
+                  {p.is_dead ? <span className="ml-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-400">Dead</span> : null}
                 </span>
+                {!p.is_dead ? (
+                  <button type="button" title="Mark as dead (permanent)" onClick={() => setDeadTarget(p)} className="text-slate-500 hover:text-rotom-red-light">
+                    <Skull className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
+                  title="Remove Pokémon"
                   onClick={() => removePokemon.mutate(p.id, { onSuccess: () => toast("Pokémon removed", "success") })}
                   className="text-slate-500 hover:text-rotom-red-light"
                 >
@@ -256,6 +269,10 @@ export function ManageUserModal({
             value={givePokemonAbility}
             onChange={(e) => setGivePokemonAbility(e.target.value)}
           />
+          <label className="flex items-center gap-1.5 text-xs text-slate-300">
+            <input type="checkbox" checked={givePokemonShiny} onChange={(e) => setGivePokemonShiny(e.target.checked)} className="h-4 w-4 accent-volt" />
+            Shiny
+          </label>
           <button type="button" className={adminButtonPrimary} onClick={givePokemon} disabled={quickGrant.isPending}>
             Give Pokémon
           </button>
@@ -330,6 +347,21 @@ export function ManageUserModal({
           </button>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={!!deadTarget}
+        title={`Mark ${deadTarget?.nickname || deadTarget?.species.name} as dead?`}
+        message="This is permanent. A dead Pokémon can't be healed, revived, leveled, evolved, or enter battles — and not even the Game Master can undo it from the app."
+        confirmLabel="Mark as dead"
+        destructive
+        onCancel={() => setDeadTarget(null)}
+        onConfirm={() => {
+          if (!deadTarget) return;
+          const name = deadTarget.nickname || deadTarget.species.name;
+          setDead.mutate({ pokemonId: deadTarget.id }, { onSuccess: () => toast(`${name} has died`, "success") });
+          setDeadTarget(null);
+        }}
+      />
 
       <ConfirmDialog
         open={deleteConfirmOpen}

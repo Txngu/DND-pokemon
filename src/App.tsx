@@ -12,12 +12,15 @@ import Shop from "@/pages/Shop";
 import Trade from "@/pages/Trade";
 import Notifications from "@/pages/Notifications";
 import Settings from "@/pages/Settings";
+import PokemonCenter from "@/pages/PokemonCenter";
+import Battle from "@/pages/Battle";
 import NotFound from "@/pages/NotFound";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminRewards from "@/pages/admin/AdminRewards";
 import AdminItems from "@/pages/admin/AdminItems";
 import AdminActivityLog from "@/pages/admin/AdminActivityLog";
+import AdminBattleManager from "@/pages/admin/AdminBattleManager";
 
 export default function App() {
   return (
@@ -40,6 +43,8 @@ export default function App() {
           <Route path="/trade" element={<Trade />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/pokemon-center" element={<PokemonCenter />} />
+          <Route path="/battle" element={<Battle />} />
         </Route>
       </Route>
 
@@ -58,6 +63,7 @@ export default function App() {
           <Route path="/admin/rewards" element={<AdminRewards />} />
           <Route path="/admin/items" element={<AdminItems />} />
           <Route path="/admin/activity" element={<AdminActivityLog />} />
+          <Route path="/admin/battles" element={<AdminBattleManager />} />
         </Route>
       </Route>
 

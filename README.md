@@ -367,6 +367,59 @@ Inherits the new look automatically, by construction, without being individually
 
 **Honest scope boundary**: I did not restructure the layout of Bag/PC/Shop/Trade/Settings/Notifications (a literal "category sidebar" for Bag, for instance, isn't built) — the brief was explicit that "the layout stays identical," and doing full bespoke visual passes on every individual screen beyond the shared components above was more than this iteration could respect that constraint *and* stay reliable. What's here is a real, working, verified-by-build theme system plus deep treatment of the screens a trainer sees most (lock, home, headers, profile, buttons, cards) — a solid foundation to extend screen-by-screen from here if you want more.
 
+## Phase 9: D&D Battle System
+
+New in `supabase/migrations/0008_battle_system.sql`. Run it after `0001`–`0007`; it also switches on Supabase Realtime for the four live tables (if your project ever reports that Realtime isn't enabled for them, turn on replication for `battle_encounters`, `battle_logs`, `battle_participants`, and `trainer_pokemon` under **Database → Replication**).
+
+### Everything campaign-specific is data, not code
+
+| Rule | Where it lives | Change it with |
+|---|---|---|
+| Max level | `game_config` (`max_level`) | `update game_config set value = '12' where key = 'max_level';` |
+| XP curve | `game_config` (`xp_curve`, JSON keyed by target level) | `update game_config set value = value \|\| '{"11":5000,"12":10000}'::jsonb where key = 'xp_curve';` |
+| Evolutions | `evolution_rules` (level / item / held_item / trade / friendship / custom) | `insert into evolution_rules (from_species_id, to_species_id, method, level_required) values (…);` |
+| Species available | `species` | plain `insert` — the app treats it generically |
+
+The app reads these at runtime (`useGameConfig`, `useEvolutionRulesFor`), so changing a rule needs no rebuild. The XP bar, level-up loop, and evolution checks all derive from them — there is no per-level code anywhere.
+
+**KP is HP.** The campaign's "KP" reuses the existing `current_hp` / `max_hp` columns rather than adding duplicates; only the UI says "KP". New columns: `xp`, `is_dead`, `is_shiny`.
+
+### Fainted vs. Dead
+
+- **Fainted** is automatic: KP hitting 0 sets `status = 'fainted'`. A fainted Pokémon is frozen — it can't take or heal KP, can't join a battle — until it is explicitly revived at the **Pokémon Center** (which restores full KP and clears fainted in one atomic step).
+- **Dead** is Game Master only (`admin_set_pokemon_dead`) and permanent. It's enforced at three independent layers: every KP/XP/heal/revive/evolve function refuses a dead Pokémon; a trigger (`enforce_dead_pokemon_immutable`) freezes its KP/level/XP/species/status *and* refuses to let `is_dead` ever be un-set, even against a raw SQL edit; and `join_battle` refuses it. Players have no path to mark their own Pokémon dead.
+
+### Every KP change goes through one function
+
+`adjust_pokemon_kp` clamps to `[0, max]`, records a `battle_logs` row (previous KP, new KP, delta, author, optional note, optional encounter) and notifies on fainting. `battle_logs` has no client write path at all and nothing deletes from it — "never delete logs" is a property of the permissions, not a promise. The Game Master's enemy KP uses the equivalent `admin_adjust_enemy_kp`.
+
+### XP, levels, evolution
+
+`grant_pokemon_xp` consumes XP against the curve in a loop, so one large grant can level several times, and it re-checks `level` evolution rules after *each* level gained against the current species — a Ralts given a lot of XP at once correctly goes Kirlia → Gardevoir. Item and held-item evolutions are an explicit "Evolve" button (only enabled when the item is in the Bag / held), validated again server-side by `evolve_with_item`, which also consumes the item. Trade evolutions are checked inside `confirm_trade` right after ownership moves, so they're as atomic as the trade itself (and both traders are notified). Evolving keeps level, XP and KP untouched — only the species changes.
+
+### Live battles (Supabase Realtime)
+
+- **Players**: a new **Battle** app lists active encounters, shows the enemy's KP and everyone's party KP live, lets you bring one of your Pokémon in, and lets you take damage/heal it with each change logged against the encounter.
+- **Game Master**: **Admin → Battle Manager** creates encounters (name, enemy, optional species sprite, level, KP, notes), adjusts enemy KP with the same quick buttons + custom value, sees participants and the log, and ends the encounter (which notifies participants).
+- Visibility: a Pokémon that has joined an *active* encounter becomes readable by the other trainers at the table (same narrow, shared-context pattern as Pokémon offered in a trade). Realtime only delivers rows a subscriber could already `SELECT`, so it can't leak anything beyond that.
+
+### Pokémon Center
+
+Lists the whole team (fainted first), with **Heal** (conscious Pokémon) and **Revive** (fainted only; dead Pokémon show no actions). The 3-second ball-in-machine → glow → blue pulse → progress → sparkle animation plays while the RPC runs in parallel, so the database is correct even if the trainer closes the app mid-animation.
+
+### Creating Pokémon
+
+The Admin give-Pokémon forms (Users page and Rewards composer) now cover species, level, nature, ability, held item, current/max KP, starting XP, status and Shiny. This also meant extending `send_admin_reward` (it predated the `xp`/`is_shiny` columns).
+
+### Honest scope notes
+
+- **Trade-evolution animation**: trade evolutions apply and notify both players, but the animated sequence currently plays for XP- and item-triggered evolutions (where the client already knows both species). A Pokémon that evolved in a trade shows its new species when opened.
+- **No admin screens for `game_config` or `evolution_rules` yet** — they're SQL-editable today (examples above); the tables are admin-writable under RLS if you want to build one.
+- **Species coverage**: Gen 1 plus the eight needed for your examples (Ralts line, Shinx line, Riolu/Lucario). Add others with a plain `insert`.
+- **No held-item evolution is seeded** (no natural example in the seeded species), but the method is fully supported.
+- The one-click "Give Pokémon" on the Users page derives max KP from level (`level × 3 + 10`); the Rewards composer lets you set it exactly.
+- This phase was type-checked and production-built but, as with earlier phases, not executed against a live Supabase project from here — treat your first run of the migration as the real test.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.

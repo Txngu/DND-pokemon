@@ -1,4 +1,4 @@
-import { Backpack, Server, ShoppingBag, ArrowLeftRight, IdCard, Radio, Settings, ShieldCheck } from "lucide-react";
+import { Backpack, Server, ShoppingBag, ArrowLeftRight, IdCard, Radio, Settings, ShieldCheck, HeartPulse, Swords } from "lucide-react";
 import { StatusBar, useClock } from "@/components/phone/StatusBar";
 import { AppIcon } from "@/components/phone/AppIcon";
 import { Dock } from "@/components/phone/Dock";
@@ -17,6 +17,8 @@ const apps = [
   { label: "Profile", to: "/profile", icon: <IdCard className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "Notifications", to: "/notifications", icon: <Radio className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "Settings", to: "/settings", icon: <Settings className="h-7 w-7" strokeWidth={1.75} /> },
+  { label: "PokéCenter", to: "/pokemon-center", icon: <HeartPulse className="h-7 w-7" strokeWidth={1.75} /> },
+  { label: "Battle", to: "/battle", icon: <Swords className="h-7 w-7" strokeWidth={1.75} /> },
 ];
 
 export function HomeScreen({ profile }: { profile: Profile }) {

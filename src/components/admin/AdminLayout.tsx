@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Users, Gift, Package, ScrollText, Smartphone } from "lucide-react";
+import { LayoutDashboard, Users, Gift, Package, ScrollText, Smartphone, Swords } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/battles", label: "Battle Manager", icon: Swords },
   { to: "/admin/rewards", label: "Rewards", icon: Gift },
   { to: "/admin/items", label: "Items", icon: Package },
   { to: "/admin/activity", label: "Activity Log", icon: ScrollText },
