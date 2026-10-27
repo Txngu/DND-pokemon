@@ -95,13 +95,13 @@ alter table public.trainer_pokemon
   add constraint trainer_pokemon_party_slot_excl
   exclude using gist (profile_id with =, party_slot with =)
   where (party_slot is not null)
-  deferrable initial immediate;
+  deferrable initially immediate;
 
 alter table public.trainer_pokemon
   add constraint trainer_pokemon_box_slot_excl
   exclude using gist (box_id with =, box_slot with =)
   where (box_id is not null)
-  deferrable initial immediate;
+  deferrable initially immediate;
 
 -- Place any pre-Phase-4 Pokémon (Phase 3 seed data) into the party first,
 -- then into Box 1, so existing data doesn't break the new "must be
