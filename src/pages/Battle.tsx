@@ -21,6 +21,9 @@ import {
   useLeaveBattle,
   useAdjustPokemonKp,
 } from "@/hooks/useBattle";
+import { useGameConfig } from "@/hooks/useBattle";
+import { useMyBattle } from "@/hooks/useEncounter";
+import { BattleScreen } from "@/components/battle/BattleScreen";
 import type { BattleEncounter } from "@/types/database.types";
 
 /**
@@ -30,6 +33,25 @@ import type { BattleEncounter } from "@/types/database.types";
  * by Supabase Realtime — nobody has to refresh.
  */
 export default function Battle() {
+  const { data: myBattle, isLoading: myBattleLoading } = useMyBattle();
+
+  // An encounter the Game Master put this trainer into takes over the whole
+  // app screen. Otherwise, fall back to the Phase 9 table-top encounter list.
+  if (myBattleLoading) {
+    return (
+      <div className="flex h-full flex-col gap-3 p-5 pt-14">
+        <Skeleton className="h-64 w-full rounded-3xl" />
+        <Skeleton className="h-28 w-full rounded-2xl" />
+      </div>
+    );
+  }
+  if (myBattle) {
+    return <BattleScreen key={myBattle.encounter_id} encounterId={myBattle.encounter_id} />;
+  }
+  return <ManualEncounters />;
+}
+
+function ManualEncounters() {
   const { data: encounters, isLoading } = useActiveEncounters();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
@@ -74,7 +96,7 @@ export default function Battle() {
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <Swords className="h-8 w-8 text-mist/20" strokeWidth={1.5} />
             <p className="max-w-[230px] text-xs text-mist/50">
-              No battles are running right now. When your Game Master starts an encounter, it will show up here.
+              No battles are running right now. When your Game Master starts an encounter with you in it, the battle opens automatically.
             </p>
           </div>
         ) : (
@@ -109,6 +131,8 @@ function EncounterView({ encounter, onBack }: { encounter: BattleEncounter; onBa
   const joinBattle = useJoinBattle();
   const leaveBattle = useLeaveBattle();
   const adjustKp = useAdjustPokemonKp();
+  const { data: config } = useGameConfig();
+  const canEditKp = profile.role === "admin" || !!config?.playerSelfEdit;
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
   useBattleRealtime(encounter.id);
@@ -198,6 +222,8 @@ function EncounterView({ encounter, onBack }: { encounter: BattleEncounter; onBa
                         <p className="text-center text-[11px] text-mist/40">This Pokémon has died.</p>
                       ) : fainted ? (
                         <p className="text-center text-[11px] text-rotom-red-light">Fainted — revive it at the Pokémon Center.</p>
+                      ) : !canEditKp ? (
+                        <p className="text-center text-[11px] text-mist/40">Your Game Master tracks KP for this encounter.</p>
                       ) : (
                         <KpEditor
                           compact

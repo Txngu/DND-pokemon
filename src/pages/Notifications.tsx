@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Bell, ShoppingBag, ArrowLeftRight, Gift, Package, ShieldCheck, Info, CheckCheck, Trash2, X, Skull, HeartPulse, Sparkles, TrendingUp, Swords } from "lucide-react";
+import { Bell, ShoppingBag, ArrowLeftRight, Gift, Package, ShieldCheck, Info, CheckCheck, Trash2, X, Skull, HeartPulse, Sparkles, TrendingUp, Swords, Trophy } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +30,7 @@ function iconFor(kind: string) {
   if (kind.startsWith("trade")) return <ArrowLeftRight className="h-4 w-4" />;
   if (kind === "pokemon_received") return <Gift className="h-4 w-4" />;
   if (kind === "item_received") return <Package className="h-4 w-4" />;
+  if (kind === "battle_reward") return <Trophy className="h-4 w-4" />;
   if (kind === "admin_reward") return <ShieldCheck className="h-4 w-4" />;
   if (kind === "evolution") return <Sparkles className="h-4 w-4" />;
   if (kind === "level_up" || kind === "xp_gained") return <TrendingUp className="h-4 w-4" />;
@@ -159,7 +160,7 @@ export default function Notifications() {
                     <p className="truncate text-sm font-medium text-mist">{n.title}</p>
                     {!n.read ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt" /> : null}
                   </div>
-                  <p className="mt-0.5 text-xs text-mist/60">{n.body}</p>
+                  <p className="mt-0.5 whitespace-pre-line text-xs text-mist/60">{n.body}</p>
                   <p className="mt-1 font-mono text-[10px] text-mist/40">{timeAgo(n.created_at)}</p>
                 </div>
               </button>

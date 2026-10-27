@@ -18,7 +18,10 @@ const queryClient = new QueryClient({
   // Global fallback so every mutation failure surfaces as a toast, even if
   // a screen doesn't render its own inline error message for that mutation.
   mutationCache: new MutationCache({
-    onError: (error) => {
+    onError: (error, _variables, _context, mutation) => {
+      // Screens that show errors in their own UI (e.g. the battle message
+      // box) opt out with `meta: { silent: true }`.
+      if (mutation.meta?.silent) return;
       const message = error instanceof Error ? error.message : "Something went wrong";
       toast(message, "error");
     },

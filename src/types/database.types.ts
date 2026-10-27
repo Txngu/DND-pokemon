@@ -6,8 +6,21 @@ export type RewardKind = "money" | "items" | "pokemon";
 export type RewardStatus = "draft" | "sent";
 export type RewardRecipientMode = "user" | "users" | "all" | "city";
 export type EvolutionMethod = "level" | "item" | "held_item" | "trade" | "friendship" | "custom";
-export type BattleStatus = "active" | "ended";
-export type BattleTargetType = "trainer_pokemon" | "enemy";
+export type BattleStatus = "active" | "completed" | "lost" | "rewarded" | "ended";
+export type BattleMode = "manual" | "auto";
+export type PokemonType =
+  | "normal" | "fire" | "water" | "electric" | "grass" | "ice" | "fighting" | "poison" | "ground"
+  | "flying" | "psychic" | "bug" | "rock" | "ghost" | "dragon" | "dark" | "steel" | "fairy";
+export type MoveCategory = "physical" | "special";
+export type RewardSplitMode = "equal" | "per_player" | "custom";
+export type BattleTargetType = "trainer_pokemon" | "enemy" | "system";
+/** items_catalog.battle_effect — see 0009_battle_data.sql. */
+export interface ItemBattleEffect {
+  heal?: number;
+  heal_full?: boolean;
+  revive?: number;
+  cure?: boolean | PokemonStatus[];
+}
 export interface NotificationPrefs {
   trades: boolean;
   purchases: boolean;
@@ -104,14 +117,20 @@ export interface Database {
         Row: {
           id: number;
           name: string;
+          type1: PokemonType | null;
+          type2: PokemonType | null;
         };
         Insert: {
           id: number;
           name: string;
+          type1?: PokemonType | null;
+          type2?: PokemonType | null;
         };
         Update: {
           id?: number;
           name?: string;
+          type1?: PokemonType | null;
+          type2?: PokemonType | null;
         };
         Relationships: [];
       };
@@ -129,6 +148,7 @@ export interface Database {
           is_sellable: boolean;
           sort_order: number;
           created_at: string;
+          battle_effect: ItemBattleEffect | null;
         };
         Insert: {
           id?: string;
@@ -143,6 +163,7 @@ export interface Database {
           is_sellable?: boolean;
           sort_order?: number;
           created_at?: string;
+          battle_effect?: ItemBattleEffect | null;
         };
         Update: {
           id?: string;
@@ -157,6 +178,7 @@ export interface Database {
           is_sellable?: boolean;
           sort_order?: number;
           created_at?: string;
+          battle_effect?: ItemBattleEffect | null;
         };
         Relationships: [];
       };
@@ -481,6 +503,11 @@ export interface Database {
           xp: number;
           is_dead: boolean;
           is_shiny: boolean;
+          bonus_attack: number;
+          bonus_defense: number;
+          bonus_sp_attack: number;
+          bonus_sp_defense: number;
+          bonus_speed: number;
         };
         Insert: {
           id?: string;
@@ -502,6 +529,11 @@ export interface Database {
           xp?: number;
           is_dead?: boolean;
           is_shiny?: boolean;
+          bonus_attack?: number;
+          bonus_defense?: number;
+          bonus_sp_attack?: number;
+          bonus_sp_defense?: number;
+          bonus_speed?: number;
         };
         Update: {
           id?: string;
@@ -523,6 +555,11 @@ export interface Database {
           xp?: number;
           is_dead?: boolean;
           is_shiny?: boolean;
+          bonus_attack?: number;
+          bonus_defense?: number;
+          bonus_sp_attack?: number;
+          bonus_sp_defense?: number;
+          bonus_speed?: number;
         };
         Relationships: [
           {
@@ -653,6 +690,11 @@ export interface Database {
           created_by: string | null;
           created_at: string;
           ended_at: string | null;
+          mode: BattleMode;
+          enemy_auto_attack: boolean;
+          enemy_damage_scale: number;
+          completed_at: string | null;
+          rewarded_at: string | null;
         };
         Insert: {
           id?: string;
@@ -668,6 +710,11 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           ended_at?: string | null;
+          mode?: BattleMode;
+          enemy_auto_attack?: boolean;
+          enemy_damage_scale?: number;
+          completed_at?: string | null;
+          rewarded_at?: string | null;
         };
         Update: {
           id?: string;
@@ -683,6 +730,11 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           ended_at?: string | null;
+          mode?: BattleMode;
+          enemy_auto_attack?: boolean;
+          enemy_damage_scale?: number;
+          completed_at?: string | null;
+          rewarded_at?: string | null;
         };
         Relationships: [];
       };
@@ -705,6 +757,13 @@ export interface Database {
           author_id: string | null;
           note: string | null;
           created_at: string;
+          action: string | null;
+          actor_profile_id: string | null;
+          enemy_id: string | null;
+          move_name: string | null;
+          is_critical: boolean | null;
+          effectiveness: number | null;
+          message: string | null;
         };
         Insert: {
           id?: string;
@@ -732,6 +791,151 @@ export interface Database {
           note?: string | null;
           created_at?: string;
         };
+        Relationships: [];
+      };
+      moves: {
+        Row: {
+          id: number;
+          name: string;
+          type: PokemonType;
+          category: MoveCategory;
+          power: number;
+          accuracy: number | null;
+          description: string | null;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+          type: PokemonType;
+          category: MoveCategory;
+          power: number;
+          accuracy?: number | null;
+          description?: string | null;
+        };
+        Update: {
+          id?: number;
+          name?: string;
+          type?: PokemonType;
+          category?: MoveCategory;
+          power?: number;
+          accuracy?: number | null;
+          description?: string | null;
+        };
+        Relationships: [];
+      };
+      battle_enemies: {
+        Row: {
+          id: string;
+          encounter_id: string;
+          slot: number;
+          name: string;
+          species_id: number | null;
+          sprite_url: string | null;
+          level: number;
+          current_hp: number;
+          max_hp: number;
+          attack: number;
+          defense: number;
+          sp_attack: number;
+          sp_defense: number;
+          speed: number;
+          type1: PokemonType;
+          type2: PokemonType | null;
+          move_ids: number[];
+          fainted_at: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      battle_players: {
+        Row: {
+          id: string;
+          encounter_id: string;
+          profile_id: string;
+          active_pokemon_id: string | null;
+          damage_dealt: number;
+          joined_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "battle_players_encounter_id_fkey";
+            columns: ["encounter_id"];
+            isOneToOne: false;
+            referencedRelation: "battle_encounters";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      battle_rewards: {
+        Row: {
+          id: string;
+          encounter_id: string;
+          admin_id: string | null;
+          money_mode: RewardSplitMode;
+          money_input: number;
+          total_money: number;
+          xp_mode: RewardSplitMode;
+          xp_input: number;
+          total_xp: number;
+          participant_count: number;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      battle_reward_recipients: {
+        Row: {
+          id: string;
+          reward_id: string;
+          encounter_id: string;
+          profile_id: string;
+          money: number;
+          xp: number;
+          xp_pokemon_id: string | null;
+          xp_pokemon_name: string | null;
+          xp_claimed_at: string | null;
+          level_before: number | null;
+          level_after: number | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "battle_reward_recipients_encounter_id_fkey";
+            columns: ["encounter_id"];
+            isOneToOne: false;
+            referencedRelation: "battle_encounters";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      money_transactions: {
+        Row: {
+          id: string;
+          profile_id: string;
+          amount: number;
+          balance_after: number;
+          kind: string;
+          source_type: string | null;
+          source_id: string | null;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      trainer_pokemon_moves: {
+        Row: { pokemon_id: string; slot: number; move_id: number };
+        Insert: { pokemon_id: string; slot: number; move_id: number };
+        Update: { pokemon_id?: string; slot?: number; move_id?: number };
         Relationships: [];
       };
       trainer_items: {
@@ -872,6 +1076,52 @@ export interface Database {
         Args: { p_encounter_id: string };
         Returns: void;
       };
+      get_battle_state: { Args: { p_encounter_id: string }; Returns: unknown };
+      get_my_battle: { Args: Record<string, never>; Returns: unknown };
+      battle_choose_pokemon: { Args: { p_encounter_id: string; p_pokemon_id: string }; Returns: unknown };
+      battle_attack: { Args: { p_encounter_id: string; p_move_id: number; p_target_enemy_id?: string | null }; Returns: unknown };
+      battle_use_item: { Args: { p_encounter_id: string; p_item_id: string; p_pokemon_id: string }; Returns: unknown };
+      pokemon_battle_profile: { Args: { p_pokemon_id: string }; Returns: unknown };
+      admin_set_pokemon_battle_setup: {
+        Args: { p_pokemon_id: string; p_move_ids: number[] | null; p_bonus?: Record<string, number> | null };
+        Returns: unknown;
+      };
+      admin_create_battle: {
+        Args: {
+          p_name: string;
+          p_description: string | null;
+          p_player_ids: string[];
+          p_enemies: unknown;
+          p_enemy_auto_attack?: boolean;
+          p_enemy_damage_scale?: number;
+        };
+        Returns: string;
+      };
+      admin_add_battle_players: { Args: { p_encounter_id: string; p_player_ids: string[] }; Returns: number };
+      admin_adjust_enemy_hp: { Args: { p_enemy_id: string; p_delta: number; p_note?: string | null }; Returns: unknown };
+      admin_enemy_attack: {
+        Args: { p_encounter_id: string; p_enemy_id: string; p_target_pokemon_id?: string | null };
+        Returns: unknown;
+      };
+      admin_set_battle_status: { Args: { p_encounter_id: string; p_status: string }; Returns: void };
+      admin_give_battle_rewards: {
+        Args: {
+          p_encounter_id: string;
+          p_money_mode: RewardSplitMode;
+          p_money_value: number;
+          p_xp_mode: RewardSplitMode;
+          p_xp_value: number;
+          p_custom?: unknown;
+          p_expected?: unknown;
+        };
+        Returns: unknown;
+      };
+      claim_battle_xp: { Args: { p_recipient_id: string; p_pokemon_id: string }; Returns: unknown };
+      heal_party: { Args: { p_pokemon_ids?: string[] | null }; Returns: unknown };
+      suggest_moves: {
+        Args: { p_type1: string; p_type2: string | null; p_level: number };
+        Returns: Database["public"]["Tables"]["moves"]["Row"][];
+      };
     };
     Enums: {
       user_role: UserRole;
@@ -956,4 +1206,211 @@ export interface EvolutionRule extends EvolutionRuleRow {
 export interface BattleParticipant extends BattleParticipantRow {
   pokemon: TrainerPokemon;
   trainer: TrainerDirectoryEntry;
+}
+
+export type Move = Database["public"]["Tables"]["moves"]["Row"];
+export type MoneyTransaction = Database["public"]["Tables"]["money_transactions"]["Row"];
+export type BattleRewardRecipientRow = Database["public"]["Tables"]["battle_reward_recipients"]["Row"];
+
+// ---------------------------------------------------------------------------
+// Shapes returned by the battle RPCs (0010_battle_engine.sql)
+// ---------------------------------------------------------------------------
+export interface BattleMove {
+  id: number;
+  name: string;
+  type: PokemonType;
+  category: MoveCategory;
+  power: number;
+  accuracy: number | null;
+}
+
+export interface BattleEnemyState {
+  id: string;
+  slot: number;
+  name: string;
+  species_id: number | null;
+  sprite_url: string | null;
+  level: number;
+  current_hp: number;
+  max_hp: number;
+  type1: PokemonType;
+  type2: PokemonType | null;
+  fainted: boolean;
+  /** Game Master only */
+  attack?: number;
+  defense?: number;
+  sp_attack?: number;
+  sp_defense?: number;
+  speed?: number;
+  moves?: BattleMove[];
+}
+
+export interface BattleActivePokemon {
+  id: string;
+  name: string;
+  species_id: number;
+  level: number;
+  current_hp: number;
+  max_hp: number;
+  status: PokemonStatus;
+  is_shiny: boolean;
+  type1: PokemonType | null;
+  type2: PokemonType | null;
+}
+
+export interface BattlePlayerState {
+  id: string;
+  profile_id: string;
+  username: string;
+  avatar: string | null;
+  damage_dealt: number;
+  joined_at: string;
+  usable_count: number;
+  active_pokemon: BattleActivePokemon | null;
+}
+
+export interface BattlePartyPokemon extends BattleActivePokemon {
+  is_dead: boolean;
+  party_slot: number;
+  speed: number;
+  moves: BattleMove[];
+}
+
+export interface BattleBagItem {
+  item_id: string;
+  name: string;
+  quantity: number;
+  effect: ItemBattleEffect;
+  pokeapi_slug: string | null;
+  icon_url: string | null;
+  icon_emoji: string | null;
+  description: string | null;
+}
+
+export interface BattleLogEntry {
+  id: string;
+  action: string | null;
+  target_type: BattleTargetType;
+  target_label: string;
+  previous_kp: number;
+  new_kp: number;
+  delta: number;
+  move_name: string | null;
+  is_critical: boolean | null;
+  effectiveness: number | null;
+  message: string | null;
+  actor_profile_id: string | null;
+  enemy_id: string | null;
+  target_pokemon_id: string | null;
+  created_at: string;
+}
+
+export interface BattleRewardRecipient {
+  id: string;
+  profile_id: string;
+  username: string;
+  money: number;
+  xp: number;
+  xp_pokemon_id: string | null;
+  xp_pokemon_name: string | null;
+  xp_claimed_at: string | null;
+  level_before: number | null;
+  level_after: number | null;
+}
+
+export interface BattleRewardState {
+  id: string;
+  money_mode: RewardSplitMode;
+  money_input: number;
+  total_money: number;
+  xp_mode: RewardSplitMode;
+  xp_input: number;
+  total_xp: number;
+  participant_count: number;
+  created_at: string;
+  recipients: BattleRewardRecipient[];
+}
+
+export interface BattleState {
+  encounter: BattleEncounter;
+  is_admin: boolean;
+  enemies: BattleEnemyState[];
+  players: BattlePlayerState[];
+  logs: BattleLogEntry[];
+  reward: BattleRewardState | null;
+  me?: {
+    battle_player_id: string;
+    profile_id: string;
+    active_pokemon_id: string | null;
+    damage_dealt: number;
+    party: BattlePartyPokemon[];
+    items: BattleBagItem[];
+  };
+}
+
+/** One step of a resolved battle action, played back in order by the battle screen. */
+export interface BattleEvent {
+  type: "attack" | "faint" | "blocked" | "status" | "chip" | "item" | "switch" | "victory" | "defeat";
+  side?: "player" | "enemy";
+  message: string;
+  detail?: string | null;
+  attacker_id?: string;
+  attacker_name?: string;
+  attacker_profile_id?: string;
+  move_name?: string;
+  move_type?: PokemonType;
+  target_id?: string;
+  target_name?: string;
+  target_profile_id?: string;
+  missed?: boolean;
+  damage?: number;
+  effectiveness?: number;
+  critical?: boolean;
+  hp_before?: number;
+  hp_after?: number;
+  max_hp?: number;
+  fainted?: boolean;
+  pokemon_id?: string;
+  pokemon_name?: string;
+  profile_id?: string;
+  species_id?: number;
+  item_name?: string;
+  revived?: boolean;
+  cured?: boolean;
+  status_after?: PokemonStatus;
+}
+
+export interface BattleActionResult {
+  events: BattleEvent[];
+}
+
+export interface PokemonBattleProfile {
+  type1: PokemonType | null;
+  type2: PokemonType | null;
+  stats: { attack: number; defense: number; sp_attack: number; sp_defense: number; speed: number };
+  bonus: { attack: number; defense: number; sp_attack: number; sp_defense: number; speed: number };
+  custom_moves: boolean;
+  moves: BattleMove[];
+}
+
+export interface PartyHealResult {
+  id: string;
+  name: string;
+  species_id: number;
+  result: "revived" | "healed" | "unchanged" | "dead";
+  hp_before: number;
+  hp_after: number;
+  max_hp: number;
+  status_before: PokemonStatus;
+}
+
+export interface XpClaimResult {
+  pokemon_id: string;
+  name: string;
+  xp: number;
+  level_before: number;
+  level_after: number;
+  species_before: number;
+  species_after: number;
+  species_after_name: string;
 }
