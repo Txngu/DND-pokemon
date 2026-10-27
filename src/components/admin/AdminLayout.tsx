@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { LayoutDashboard, Users, Gift, Package, ScrollText, Smartphone, Swords } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
+import { ToastViewport } from "@/components/phone/ToastViewport";
+import { useBattlesAwaitingReward } from "@/hooks/useEncounter";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -19,6 +21,7 @@ const NAV = [
  */
 export function AdminLayout() {
   const { data: profile, isLoading } = useProfile();
+  const awaiting = useBattlesAwaitingReward();
 
   if (isLoading || !profile) {
     return (
@@ -54,6 +57,11 @@ export function AdminLayout() {
             >
               <item.icon className="h-4 w-4" />
               {item.label}
+              {item.to === "/admin/battles" && awaiting.length > 0 ? (
+                <span className="ml-auto rounded-full bg-volt px-1.5 py-0.5 text-[10px] font-bold text-screen-ink" title="Battles waiting for rewards">
+                  {awaiting.length}
+                </span>
+              ) : null}
             </NavLink>
           ))}
         </nav>
@@ -88,6 +96,9 @@ export function AdminLayout() {
               >
                 <item.icon className="h-3.5 w-3.5" />
                 {item.label}
+                {item.to === "/admin/battles" && awaiting.length > 0 ? (
+                  <span className="rounded-full bg-volt px-1.5 text-[10px] font-bold text-screen-ink">{awaiting.length}</span>
+                ) : null}
               </NavLink>
             ))}
           </nav>
@@ -97,9 +108,14 @@ export function AdminLayout() {
           Signed in as <span className="font-medium text-slate-200">{profile.username}</span>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet context={{ profile }} />
         </main>
+      </div>
+
+      {/* Admin pages call toast() too; without this they were never shown. */}
+      <div className="pointer-events-none fixed inset-x-0 top-2 z-[100]">
+        <ToastViewport />
       </div>
     </div>
   );

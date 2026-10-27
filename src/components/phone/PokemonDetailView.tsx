@@ -21,6 +21,11 @@ import {
   xpToNextLevel,
 } from "@/hooks/useBattle";
 import { toast } from "@/lib/toast";
+import { useProfile } from "@/hooks/useProfile";
+import { usePokemonBattleProfile } from "@/hooks/useEncounter";
+import { TypePill } from "@/components/battle/BattleBits";
+import { TYPE_COLORS, LIGHT_TYPES } from "@/lib/battle";
+import { cn } from "@/lib/utils";
 import type { TrainerPokemon } from "@/types/database.types";
 
 export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon; onBack: () => void }) {
@@ -32,6 +37,12 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
   const { data: allSpecies } = useSpecies();
   const { data: config } = useGameConfig();
   const { data: evoRules } = useEvolutionRulesFor(pokemon.species_id);
+  const { data: me } = useProfile();
+  const { data: battleProfile } = usePokemonBattleProfile(pokemon.id);
+  // KP/XP are changed by battles, items, the Pokémon Center and battle
+  // rewards. Direct editing is for the Game Master, unless they've turned
+  // player_self_edit back on. (The server enforces this regardless.)
+  const canSelfEdit = me?.role === "admin" || !!config?.playerSelfEdit;
 
   const toggleFavorite = useToggleFavorite();
   const setHeldItem = useSetHeldItem();
@@ -164,9 +175,9 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
               <p className="text-center text-[11px] text-mist/40">This Pokémon has died and can&apos;t be changed.</p>
             ) : fainted ? (
               <p className="text-center text-[11px] text-rotom-red-light">Fainted — visit the Pokémon Center to revive.</p>
-            ) : (
+            ) : canSelfEdit ? (
               <KpEditor onAdjust={handleKpAdjust} disabled={adjustKp.isPending} />
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -179,7 +190,7 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
             ) : (
               <div className="h-1.5 animate-pulse rounded-full bg-white/10" />
             )}
-            {!pokemon.is_dead && !atMaxLevel ? (
+            {!pokemon.is_dead && !atMaxLevel && canSelfEdit ? (
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -205,6 +216,54 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
             ) : null}
           </div>
         </div>
+
+        {/* Battle: types, stats and moves used by the battle engine */}
+        {battleProfile ? (
+          <div className="mb-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-[11px] uppercase tracking-wide text-mist/50">Battle</p>
+              <div className="flex gap-1">
+                <TypePill type={battleProfile.type1} />
+                <TypePill type={battleProfile.type2} />
+              </div>
+            </div>
+            <div className="glass space-y-2.5 rounded-2xl p-3">
+              <div className="grid grid-cols-5 gap-1 text-center">
+                {(
+                  [
+                    ["Atk", battleProfile.stats.attack],
+                    ["Def", battleProfile.stats.defense],
+                    ["SpA", battleProfile.stats.sp_attack],
+                    ["SpD", battleProfile.stats.sp_defense],
+                    ["Spe", battleProfile.stats.speed],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-white/5 py-1.5">
+                    <p className="text-[9px] uppercase tracking-wide text-mist/45">{label}</p>
+                    <p className="font-mono text-xs font-semibold text-mist">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {battleProfile.moves.map((m) => (
+                  <div
+                    key={m.id}
+                    className={cn("rounded-lg px-2 py-1.5", LIGHT_TYPES.has(m.type) ? "text-screen-ink" : "text-white")}
+                    style={{ background: TYPE_COLORS[m.type] }}
+                  >
+                    <p className="truncate text-xs font-bold">{m.name}</p>
+                    <p className="text-[9px] font-semibold opacity-80">
+                      {m.category === "physical" ? "Physical" : "Special"} · {m.power} pow{m.accuracy ? ` · ${m.accuracy}%` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {!battleProfile.custom_moves ? (
+                <p className="text-center text-[10px] text-mist/40">Default moves for its type and level</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2.5">
           {stats.map(({ icon: Icon, label, value }) => (

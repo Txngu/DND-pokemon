@@ -8,6 +8,8 @@ import { usePhoneLock } from "@/hooks/usePhoneLock";
 import { RegionalThemeProvider } from "@/hooks/useRegionalTheme";
 import { resolveWallpaper } from "@/lib/cityThemes";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BattleWatcher } from "@/components/battle/BattleWatcher";
+import { XpRewardPrompt } from "@/components/battle/XpRewardPrompt";
 
 /**
  * Shell for every authenticated screen. The lock state lives in
@@ -46,7 +48,12 @@ export function PhoneLayout() {
         ) : locked ? (
           <LockScreen avatar={profile.avatar} username={profile.username} onUnlock={handleUnlock} />
         ) : (
-          <AnimatedOutlet profile={profile} />
+          <>
+            <AnimatedOutlet profile={profile} />
+            {/* PokéGear 10.0: auto-open admin battles, and ask where battle XP goes */}
+            <BattleWatcher />
+            <XpRewardPrompt />
+          </>
         )}
         <ToastViewport />
       </PhoneFrame>

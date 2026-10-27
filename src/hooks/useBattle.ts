@@ -24,7 +24,12 @@ export function useGameConfig() {
       if (error) throw error;
       const maxLevel = Number(data.find((r) => r.key === "max_level")?.value ?? 10);
       const xpCurve = (data.find((r) => r.key === "xp_curve")?.value as Record<string, number>) ?? {};
-      return { maxLevel, xpCurve };
+      // When false (the default since PokéGear 10.0) only the Game Master can
+      // edit KP/XP directly; trainers change them through battles, items and
+      // the Pokémon Center. The server enforces this either way.
+      const playerSelfEdit = String(data.find((r) => r.key === "player_self_edit")?.value ?? "false") === "true";
+      const damageScale = Number(data.find((r) => r.key === "battle_damage_scale")?.value ?? 5) || 5;
+      return { maxLevel, xpCurve, playerSelfEdit, damageScale };
     },
     staleTime: 5 * 60_000,
   });
@@ -190,6 +195,7 @@ export function useActiveEncounters() {
         .from("battle_encounters")
         .select("*")
         .eq("status", "active")
+        .eq("mode", "manual")
         .order("created_at", { ascending: false })
         .returns<BattleEncounter[]>();
       if (error) throw error;

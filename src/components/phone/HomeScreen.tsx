@@ -7,6 +7,7 @@ import { RegionalEmblem } from "@/components/theme/Emblems";
 import { useRegionalTheme } from "@/hooks/useRegionalTheme";
 import { useCities } from "@/hooks/useProfile";
 import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { useMyBattle } from "@/hooks/useEncounter";
 import type { Profile } from "@/types/database.types";
 
 const apps = [
@@ -27,6 +28,7 @@ export function HomeScreen({ profile }: { profile: Profile }) {
   const { data: cities } = useCities();
   const city = cities?.find((c) => c.id === profile.city_id);
   const unreadCount = useUnreadNotificationCount();
+  const { data: myBattle } = useMyBattle();
   const initials = profile.username.slice(0, 2).toUpperCase();
 
   const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -68,7 +70,7 @@ export function HomeScreen({ profile }: { profile: Profile }) {
             label={app.label}
             to={app.to}
             icon={app.icon}
-            badgeCount={app.to === "/notifications" ? unreadCount : undefined}
+            badgeCount={app.to === "/notifications" ? unreadCount : app.to === "/battle" && myBattle ? 1 : undefined}
           />
         ))}
         {profile.role === "admin" ? (

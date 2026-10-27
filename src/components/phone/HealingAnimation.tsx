@@ -6,7 +6,7 @@ import { pokemonArtworkUrl } from "@/lib/sprites";
 
 type Phase = "enter" | "glow" | "pulse" | "restored";
 
-function PokeBall({ className }: { className?: string }) {
+export function PokeBall({ className }: { className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-full border-2 border-black/70 ${className ?? ""}`}>
       <div className="absolute inset-x-0 top-0 h-1/2 bg-rotom-red" />

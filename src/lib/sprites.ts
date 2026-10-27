@@ -14,3 +14,11 @@ export function pokemonArtworkUrl(speciesId: number): string {
 export function itemSpriteUrl(pokeapiSlug: string): string {
   return `${SPRITE_BASE}/items/${pokeapiSlug}.png`;
 }
+
+/** Battle sprites: front for enemies, back for the trainer's own Pokémon. */
+export function pokemonBattleSpriteUrl(speciesId: number, opts: { back?: boolean; shiny?: boolean } = {}): string {
+  const parts = ["pokemon"];
+  if (opts.back) parts.push("back");
+  if (opts.shiny) parts.push("shiny");
+  return `${SPRITE_BASE}/${parts.join("/")}/${speciesId}.png`;
+}

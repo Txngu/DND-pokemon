@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Trash2, ShieldAlert, Skull } from "lucide-react";
+import { Trash2, ShieldAlert, Skull, Swords } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { adminInput, adminLabel, adminButtonPrimary, adminButtonSecondary, adminButtonDanger } from "@/components/admin/adminStyles";
@@ -22,6 +22,7 @@ import {
   useAllItemsCatalog,
 } from "@/hooks/useAdmin";
 import { useAdminSetPokemonDead } from "@/hooks/useBattle";
+import { PokemonBattleSetupPanel } from "@/components/admin/battle/PokemonBattleSetupPanel";
 import type { Profile, TrainerPokemon } from "@/types/database.types";
 
 export function ManageUserModal({
@@ -59,6 +60,7 @@ export function ManageUserModal({
   const [givePokemonAbility, setGivePokemonAbility] = React.useState("");
   const [givePokemonShiny, setGivePokemonShiny] = React.useState(false);
   const [deadTarget, setDeadTarget] = React.useState<TrainerPokemon | null>(null);
+  const [setupTargetId, setSetupTargetId] = React.useState<string | null>(null);
   const setDead = useAdminSetPokemonDead();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [newPassword, setNewPassword] = React.useState("");
@@ -223,6 +225,14 @@ export function ManageUserModal({
                   {p.is_shiny ? " ✨" : ""}
                   {p.is_dead ? <span className="ml-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-400">Dead</span> : null}
                 </span>
+                <button
+                  type="button"
+                  title="Battle setup (moves & stats)"
+                  onClick={() => setSetupTargetId(setupTargetId === p.id ? null : p.id)}
+                  className={setupTargetId === p.id ? "text-volt" : "text-slate-500 hover:text-volt"}
+                >
+                  <Swords className="h-3.5 w-3.5" />
+                </button>
                 {!p.is_dead ? (
                   <button type="button" title="Mark as dead (permanent)" onClick={() => setDeadTarget(p)} className="text-slate-500 hover:text-rotom-red-light">
                     <Skull className="h-3.5 w-3.5" />
@@ -242,6 +252,10 @@ export function ManageUserModal({
             <p className="px-2 py-3 text-xs text-slate-500">No Pokémon yet.</p>
           )}
         </div>
+        {(() => {
+          const target = pokemon?.find((p) => p.id === setupTargetId);
+          return target ? <PokemonBattleSetupPanel key={target.id} pokemon={target} onClose={() => setSetupTargetId(null)} /> : null;
+        })()}
         <div className="flex flex-wrap items-center gap-2">
           <select className={`${adminInput} w-40`} value={givePokemonSpecies} onChange={(e) => setGivePokemonSpecies(e.target.value)}>
             {species?.map((s) => (
