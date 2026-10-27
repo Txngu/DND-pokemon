@@ -30,6 +30,12 @@ function useRealtimeInvalidate(channelName: string | null, specs: RealtimeSpec[]
   const queryClient = useQueryClient();
   const specsKey = JSON.stringify(specs);
   const keysKey = JSON.stringify(keys);
+  // Several components can use the same hook at once (e.g. the Home badge
+  // and the battle watcher). supabase.channel() returns the *existing*
+  // channel for a repeated name, and adding listeners to an already
+  // subscribed channel throws — which blanked the whole app. A per-instance
+  // suffix keeps every subscription separate.
+  const instanceId = React.useId();
 
   React.useEffect(() => {
     if (!channelName) return;
@@ -42,7 +48,7 @@ function useRealtimeInvalidate(channelName: string | null, specs: RealtimeSpec[]
         }
       }, 120);
     };
-    let channel = supabase.channel(channelName);
+    let channel = supabase.channel(`${channelName}-${instanceId}`);
     for (const spec of JSON.parse(specsKey) as RealtimeSpec[]) {
       channel = channel.on(
         "postgres_changes",
@@ -55,7 +61,7 @@ function useRealtimeInvalidate(channelName: string | null, specs: RealtimeSpec[]
       window.clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [channelName, specsKey, keysKey, queryClient]);
+  }, [channelName, instanceId, specsKey, keysKey, queryClient]);
 }
 
 // ---------------------------------------------------------------------------
