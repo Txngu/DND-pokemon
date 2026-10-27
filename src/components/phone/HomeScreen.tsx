@@ -1,4 +1,4 @@
-import { Backpack, Server, ShoppingBag, ArrowLeftRight, IdCard, Radio, Settings, ShieldCheck, HeartPulse, Swords } from "lucide-react";
+import { Backpack, Server, ShoppingBag, ArrowLeftRight, IdCard, Radio, Settings, ShieldCheck, HeartPulse, Swords, Users, Layers } from "lucide-react";
 import { StatusBar, useClock } from "@/components/phone/StatusBar";
 import { AppIcon } from "@/components/phone/AppIcon";
 import { Dock } from "@/components/phone/Dock";
@@ -11,6 +11,7 @@ import { useMyBattle } from "@/hooks/useEncounter";
 import type { Profile } from "@/types/database.types";
 
 const apps = [
+  { label: "Team", to: "/team", icon: <Users className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "Bag", to: "/bag", icon: <Backpack className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "PC", to: "/pc", icon: <Server className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "Shop", to: "/shop", icon: <ShoppingBag className="h-7 w-7" strokeWidth={1.75} /> },
@@ -20,6 +21,7 @@ const apps = [
   { label: "Settings", to: "/settings", icon: <Settings className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "PokéCenter", to: "/pokemon-center", icon: <HeartPulse className="h-7 w-7" strokeWidth={1.75} /> },
   { label: "Battle", to: "/battle", icon: <Swords className="h-7 w-7" strokeWidth={1.75} /> },
+  { label: "Cards", to: "/cards", icon: <Layers className="h-7 w-7" strokeWidth={1.75} /> },
 ];
 
 export function HomeScreen({ profile }: { profile: Profile }) {

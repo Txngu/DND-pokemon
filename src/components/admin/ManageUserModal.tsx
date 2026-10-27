@@ -9,7 +9,7 @@ import { ItemIcon } from "@/components/phone/ItemIcon";
 import { SpriteImage } from "@/components/phone/SpriteImage";
 import { toast } from "@/lib/toast";
 import { useCities } from "@/hooks/useProfile";
-import { useSpecies } from "@/hooks/useBag";
+import { SpeciesSearch } from "@/components/phone/SpeciesSearch";
 import {
   useAdminUpdateProfile,
   useQuickGrant,
@@ -23,6 +23,7 @@ import {
 } from "@/hooks/useAdmin";
 import { useAdminSetPokemonDead } from "@/hooks/useBattle";
 import { PokemonBattleSetupPanel } from "@/components/admin/battle/PokemonBattleSetupPanel";
+import { AdminTcgCollection } from "@/components/admin/AdminTcgCollection";
 import type { Profile, TrainerPokemon } from "@/types/database.types";
 
 export function ManageUserModal({
@@ -35,7 +36,6 @@ export function ManageUserModal({
   onClose: () => void;
 }) {
   const { data: cities } = useCities();
-  const { data: species } = useSpecies();
   const { data: catalog } = useAllItemsCatalog();
   const { data: pokemon } = useProfilePokemon(profile.id);
   const { data: items } = useProfileItems(profile.id);
@@ -257,13 +257,9 @@ export function ManageUserModal({
           return target ? <PokemonBattleSetupPanel key={target.id} pokemon={target} onClose={() => setSetupTargetId(null)} /> : null;
         })()}
         <div className="flex flex-wrap items-center gap-2">
-          <select className={`${adminInput} w-40`} value={givePokemonSpecies} onChange={(e) => setGivePokemonSpecies(e.target.value)}>
-            {species?.map((s) => (
-              <option key={s.id} value={s.id}>
-                #{s.id} {s.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-56">
+            <SpeciesSearch value={Number(givePokemonSpecies)} onChange={(id) => id && setGivePokemonSpecies(String(id))} />
+          </div>
           <input
             className={`${adminInput} w-20`}
             placeholder="Level"
@@ -292,6 +288,8 @@ export function ManageUserModal({
           </button>
         </div>
       </section>
+
+      <AdminTcgCollection profileId={profile.id} />
 
       {/* Items */}
       <section className="mt-6 space-y-2">

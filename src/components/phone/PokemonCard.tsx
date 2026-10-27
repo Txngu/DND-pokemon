@@ -1,9 +1,8 @@
 import { Star, Skull, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import { SpriteImage } from "@/components/phone/SpriteImage";
+import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { HpBar } from "@/components/phone/HpBar";
 import { StatusBadge } from "@/components/phone/StatusBadge";
-import { pokemonSpriteUrl } from "@/lib/sprites";
 import { cn } from "@/lib/utils";
 import type { TrainerPokemon } from "@/types/database.types";
 
@@ -19,11 +18,11 @@ export function PokemonCard({ pokemon, onClick }: { pokemon: TrainerPokemon; onC
       className="glass theme-accent-line flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left shadow-glass active:bg-white/10"
     >
       <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/5">
-        <SpriteImage
-          src={pokemonSpriteUrl(pokemon.species_id)}
+        <PokemonSprite
+          speciesId={pokemon.species_id}
+          shiny={pokemon.is_shiny}
           alt={pokemon.species.name}
           className={cn("h-12 w-12", down && "opacity-40 grayscale")}
-          fallbackClassName="h-12 w-12"
         />
         {pokemon.is_dead ? <Skull className="absolute -right-1 -top-1 h-4 w-4 text-mist/70" /> : null}
       </div>

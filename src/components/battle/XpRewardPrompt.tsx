@@ -8,7 +8,7 @@ import { pokemonSpriteUrl } from "@/lib/sprites";
 import { formatMoney } from "@/lib/battle";
 import { cn } from "@/lib/utils";
 import { useTrainerPokemon } from "@/hooks/useBag";
-import { useGameConfig, xpToNextLevel } from "@/hooks/useBattle";
+import { useGameConfig } from "@/hooks/useBattle";
 import { useClaimBattleXp, usePendingXpRewards } from "@/hooks/useEncounter";
 import type { TrainerPokemon, XpClaimResult } from "@/types/database.types";
 
@@ -29,7 +29,7 @@ export function XpRewardPrompt() {
   const [evo, setEvo] = React.useState<XpClaimResult | null>(null);
 
   const reward = pending?.[0] ?? null;
-  const maxLevel = config?.maxLevel ?? 10;
+  const maxLevel = config?.maxLevel ?? 8;
 
   const choices = React.useMemo(() => {
     const list = (pokemon ?? []).filter((p) => !p.is_dead);
@@ -122,7 +122,6 @@ export function XpRewardPrompt() {
                   ) : null}
                   {choices.map((p) => {
                     const blocked = isBlocked(p);
-                    const needed = config ? (p.level >= maxLevel ? null : xpToNextLevel(config.xpCurve, p.level)) : null;
                     return (
                       <button
                         key={p.id}
@@ -142,7 +141,7 @@ export function XpRewardPrompt() {
                             <span className="font-mono text-[10px] text-mist/50">Lv{p.level}</span>
                             {p.party_slot === null ? <span className="text-[9px] uppercase text-mist/35">PC</span> : null}
                           </div>
-                          <XpBar xp={p.xp} needed={needed} className="mt-1" />
+                          <XpBar xp={p.xp} level={p.level} className="mt-1" />
                         </div>
                         {blocked ? (
                           <span className="shrink-0 text-[10px] text-mist/50">Max level</span>

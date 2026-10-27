@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LIGHT_TYPES, TYPE_COLORS, typeLabel } from "@/lib/battle";
-import { pokemonBattleSpriteUrl } from "@/lib/sprites";
+import { pokemonSpriteSources } from "@/lib/sprites";
 import type { PokemonStatus, PokemonType } from "@/types/database.types";
 
 /** Classic battle HP bar: green → amber → red, with a lagging "damage" trail. */
@@ -125,10 +125,15 @@ export function BattleSprite({
   alt: string;
   className?: string;
 }) {
-  const [errored, setErrored] = React.useState(false);
-  const src = spriteUrl || (speciesId ? pokemonBattleSpriteUrl(speciesId, { back, shiny }) : null);
+  const sources = React.useMemo(
+    () => (spriteUrl ? [spriteUrl] : speciesId ? pokemonSpriteSources(speciesId, { view: back ? "back" : "front", shiny }) : []),
+    [spriteUrl, speciesId, back, shiny]
+  );
+  const [index, setIndex] = React.useState(0);
+  React.useEffect(() => setIndex(0), [sources]);
+  const src = sources[index] ?? null;
 
-  if (!src || errored) {
+  if (!src) {
     return (
       <div className={cn("flex items-center justify-center", className)}>
         <div className="flex h-2/3 w-2/3 items-center justify-center rounded-full bg-black/40 text-mist/40 ring-1 ring-white/10">
@@ -143,7 +148,7 @@ export function BattleSprite({
       src={src}
       alt={alt}
       draggable={false}
-      onError={() => setErrored(true)}
+      onError={() => setIndex((i) => i + 1)}
       className={cn("select-none object-contain [image-rendering:pixelated]", className)}
     />
   );

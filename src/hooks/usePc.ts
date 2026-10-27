@@ -103,3 +103,45 @@ export function useSwapPokemon() {
     },
   });
 }
+
+/**
+ * One-tap Team ↔ PC moves (PokéGear 11). The server picks the slot and
+ * enforces the rules: the Team can't be left empty, nothing moves during a
+ * battle, a full Team / PC is reported clearly.
+ */
+export function useMoveToTeam() {
+  const { data: profile } = useProfile();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (pokemonId: string) => {
+      const { data, error } = await supabase.rpc("move_pokemon_to_team", { p_pokemon_id: pokemonId });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["trainer_pokemon", profile?.id] });
+    },
+  });
+}
+
+export function useMoveToPc() {
+  const { data: profile } = useProfile();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (pokemonId: string) => {
+      const { data, error } = await supabase.rpc("move_pokemon_to_pc", { p_pokemon_id: pokemonId });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["trainer_pokemon", profile?.id] });
+    },
+  });
+}
+
+/** Where a Pokémon is, in words: "Team slot 2" / "Box 3, slot 7". */
+export function describeLocation(p: TrainerPokemon, boxes: PcBox[] | undefined) {
+  if (p.party_slot != null) return `Team slot ${p.party_slot}`;
+  const box = boxes?.find((b) => b.id === p.box_id);
+  return `${box?.name ?? "PC"}, slot ${p.box_slot}`;
+}

@@ -22,7 +22,7 @@ export function useGameConfig() {
     queryFn: async () => {
       const { data, error } = await supabase.from("game_config").select("*");
       if (error) throw error;
-      const maxLevel = Number(data.find((r) => r.key === "max_level")?.value ?? 10);
+      const maxLevel = Number(data.find((r) => r.key === "max_level")?.value ?? 8);
       const xpCurve = (data.find((r) => r.key === "xp_curve")?.value as Record<string, number>) ?? {};
       // When false (the default since PokéGear 10.0) only the Game Master can
       // edit KP/XP directly; trainers change them through battles, items and
@@ -35,7 +35,10 @@ export function useGameConfig() {
   });
 }
 
-/** XP required to go from `level` to `level + 1`, or null past the curve's data. */
+/**
+ * TOTAL XP needed to reach `level + 1`, or null past the curve's data.
+ * (PokéGear 11: the curve holds totals; see lib/xp.ts for the full helper.)
+ */
 export function xpToNextLevel(xpCurve: Record<string, number>, level: number): number | null {
   const threshold = xpCurve[String(level + 1)];
   return threshold ?? null;

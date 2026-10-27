@@ -2,7 +2,7 @@ import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Star, Swords, Sparkles, Package, Skull, Zap } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
-import { SpriteImage } from "@/components/phone/SpriteImage";
+import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { ItemIcon } from "@/components/phone/ItemIcon";
 import { HpBar } from "@/components/phone/HpBar";
 import { XpBar } from "@/components/phone/XpBar";
@@ -10,7 +10,6 @@ import { KpEditor } from "@/components/phone/KpEditor";
 import { StatusBadge } from "@/components/phone/StatusBadge";
 import { HeldItemSheet } from "@/components/phone/HeldItemSheet";
 import { EvolutionAnimation } from "@/components/phone/EvolutionAnimation";
-import { pokemonArtworkUrl } from "@/lib/sprites";
 import { useTrainerItems, useToggleFavorite, useSetHeldItem, useSpecies } from "@/hooks/useBag";
 import {
   useAdjustPokemonKp,
@@ -18,12 +17,13 @@ import {
   useEvolutionRulesFor,
   useEvolveWithItem,
   useGameConfig,
-  xpToNextLevel,
 } from "@/hooks/useBattle";
 import { toast } from "@/lib/toast";
 import { useProfile } from "@/hooks/useProfile";
 import { usePokemonBattleProfile } from "@/hooks/useEncounter";
 import { TypePill } from "@/components/battle/BattleBits";
+import { LinkedCardsStrip } from "@/components/tcg/TcgBits";
+import { useTcgLinks } from "@/hooks/useTcg";
 import { TYPE_COLORS, LIGHT_TYPES } from "@/lib/battle";
 import { cn } from "@/lib/utils";
 import type { TrainerPokemon } from "@/types/database.types";
@@ -39,6 +39,7 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
   const { data: evoRules } = useEvolutionRulesFor(pokemon.species_id);
   const { data: me } = useProfile();
   const { data: battleProfile } = usePokemonBattleProfile(pokemon.id);
+  const { data: links } = useTcgLinks();
   // KP/XP are changed by battles, items, the Pokémon Center and battle
   // rewards. Direct editing is for the Game Master, unless they've turned
   // player_self_edit back on. (The server enforces this regardless.)
@@ -52,7 +53,6 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
 
   const displayName = pokemon.nickname || pokemon.species.name;
   const fainted = pokemon.status === "fainted" && !pokemon.is_dead;
-  const nextLevelXp = config ? xpToNextLevel(config.xpCurve, pokemon.level) : null;
   const atMaxLevel = config ? pokemon.level >= config.maxLevel : false;
 
   // Level evolutions happen automatically when XP crosses a threshold (see
@@ -125,11 +125,12 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="flex flex-col items-center gap-2 pb-4">
           <div className="glass relative flex h-40 w-40 items-center justify-center rounded-3xl">
-            <SpriteImage
-              src={pokemonArtworkUrl(pokemon.species_id)}
+            <PokemonSprite
+              speciesId={pokemon.species_id}
+              view="large"
+              shiny={pokemon.is_shiny}
               alt={pokemon.species.name}
-              className={(pokemon.is_dead || fainted ? "opacity-40 grayscale " : "") + "h-32 w-32"}
-              fallbackClassName="h-32 w-32"
+              className={(pokemon.is_dead || fainted ? "opacity-40 grayscale " : "") + "h-36 w-36"}
             />
             {pokemon.is_dead ? (
               <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-black/40">
@@ -185,11 +186,7 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
         <div className="mb-3">
           <p className="mb-1.5 text-[11px] uppercase tracking-wide text-mist/50">XP</p>
           <div className="glass space-y-2.5 rounded-2xl p-3">
-            {config ? (
-              <XpBar xp={pokemon.xp} needed={atMaxLevel ? null : nextLevelXp} />
-            ) : (
-              <div className="h-1.5 animate-pulse rounded-full bg-white/10" />
-            )}
+            <XpBar xp={pokemon.xp} level={pokemon.level} />
             {!pokemon.is_dead && !atMaxLevel && canSelfEdit ? (
               <div className="flex items-center gap-2">
                 <input
@@ -216,6 +213,16 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
             ) : null}
           </div>
         </div>
+
+        {/* TCG cards the trainer linked to this Pokémon (if any) */}
+        {(links ?? []).some((l) => l.pokemon_id === pokemon.id) ? (
+          <div className="mb-3">
+            <p className="mb-1.5 text-[11px] uppercase tracking-wide text-mist/50">TCG cards</p>
+            <div className="glass rounded-2xl p-3">
+              <LinkedCardsStrip pokemonId={pokemon.id} size="md" />
+            </div>
+          </div>
+        ) : null}
 
         {/* Battle: types, stats and moves used by the battle engine */}
         {battleProfile ? (

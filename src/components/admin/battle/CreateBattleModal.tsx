@@ -5,6 +5,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { adminButtonPrimary, adminButtonSecondary, adminInput, adminLabel } from "@/components/admin/adminStyles";
 import { MoveOptions } from "@/components/admin/battle/PokemonBattleSetupPanel";
 import { BattleSprite, TypePill } from "@/components/battle/BattleBits";
+import { SpeciesSearch } from "@/components/phone/SpeciesSearch";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -318,7 +319,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
               key={e.key}
               index={idx}
               enemy={e}
-              speciesList={species ?? []}
               moves={moves}
               partyStats={partyStats ?? null}
               baseScale={baseScale}
@@ -392,7 +392,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
 function EnemyEditor({
   index,
   enemy: e,
-  speciesList,
   moves,
   partyStats,
   baseScale,
@@ -408,7 +407,6 @@ function EnemyEditor({
 }: {
   index: number;
   enemy: EnemyDraft;
-  speciesList: { id: number; name: string; type1: PokemonType | null; type2: PokemonType | null }[];
   moves: Move[] | undefined;
   partyStats: { avgLevel: number; minHp: number; maxHp: number } | null;
   baseScale: number;
@@ -465,14 +463,13 @@ function EnemyEditor({
             <span className="mb-2 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">#{index + 1}</span>
             <div className="min-w-[150px] flex-1">
               <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">Species</p>
-              <select className={`${adminInput} !py-1.5`} value={e.speciesId} onChange={(ev) => onSpecies(ev.target.value)}>
-                <option value="">Custom (no sprite)</option>
-                {speciesList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    #{s.id} {s.name}
-                  </option>
-                ))}
-              </select>
+              <SpeciesSearch
+                value={e.speciesId ? Number(e.speciesId) : null}
+                onChange={(id) => onSpecies(id ? String(id) : "")}
+                allowClear
+                clearLabel="Custom (no sprite)"
+                placeholder="Search Pokémon… (empty = custom)"
+              />
             </div>
             <div className="min-w-[120px] flex-1">
               <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">Name</p>

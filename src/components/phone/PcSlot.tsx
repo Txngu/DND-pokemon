@@ -1,7 +1,6 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Star } from "lucide-react";
-import { SpriteImage } from "@/components/phone/SpriteImage";
-import { pokemonSpriteUrl } from "@/lib/sprites";
+import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { cn } from "@/lib/utils";
 import type { TrainerPokemon } from "@/types/database.types";
 
@@ -42,11 +41,12 @@ export function PcSlot({ slotId, pokemon, isSelected, onTap }: PcSlotProps) {
           {...attributes}
           className={cn("flex h-full w-full touch-none items-center justify-center", isDragging && "opacity-30")}
         >
-          <SpriteImage
-            src={pokemonSpriteUrl(pokemon.species_id)}
+          <PokemonSprite
+            speciesId={pokemon.species_id}
+            view="icon"
+            shiny={pokemon.is_shiny}
             alt={pokemon.species.name}
-            className={cn("h-8 w-8", (pokemon.is_dead || pokemon.status === "fainted") && "opacity-40 grayscale")}
-            fallbackClassName="h-8 w-8"
+            className={cn("h-9 w-9", (pokemon.is_dead || pokemon.status === "fainted") && "opacity-40 grayscale")}
           />
           <span className="absolute bottom-0.5 right-1 font-mono text-[8px] text-mist/70">Lv{pokemon.level}</span>
           {pokemon.is_favorite ? (

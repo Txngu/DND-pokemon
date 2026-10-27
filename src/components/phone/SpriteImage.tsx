@@ -1,23 +1,34 @@
 import * as React from "react";
 import { ImageOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isPixelSprite } from "@/lib/sprites";
 
 interface SpriteImageProps {
   src: string;
   alt: string;
   className?: string;
   fallbackClassName?: string;
+  /** Tried in order if `src` fails to load (e.g. a missing shiny/female/icon variant). */
+  fallbackSrcs?: string[];
 }
 
 /**
- * Renders an official sprite fetched from PokeAPI's sprite repo. Falls back
- * to a small placeholder glyph if a given sprite 404s (some rarer item
- * slugs don't have art) rather than showing a broken image icon.
+ * Renders a sprite fetched from PokeAPI's sprite repo. Walks through
+ * `fallbackSrcs` if an image 404s, and only then shows a small placeholder
+ * glyph instead of a broken image icon. Pixel sprites are scaled with crisp
+ * edges rather than blurred.
  */
-export function SpriteImage({ src, alt, className, fallbackClassName }: SpriteImageProps) {
-  const [errored, setErrored] = React.useState(false);
+export function SpriteImage({ src, alt, className, fallbackClassName, fallbackSrcs }: SpriteImageProps) {
+  const candidates = React.useMemo(() => [src, ...(fallbackSrcs ?? [])], [src, fallbackSrcs]);
+  const [index, setIndex] = React.useState(0);
 
-  if (errored) {
+  // A different Pokémon/variant was requested: start from its first choice again.
+  const key = candidates.join("|");
+  React.useEffect(() => {
+    setIndex(0);
+  }, [key]);
+
+  if (index >= candidates.length) {
     return (
       <div className={cn("flex items-center justify-center text-mist/30", fallbackClassName, className)}>
         <ImageOff className="h-1/2 w-1/2" strokeWidth={1.5} />
@@ -25,13 +36,14 @@ export function SpriteImage({ src, alt, className, fallbackClassName }: SpriteIm
     );
   }
 
+  const current = candidates[index];
   return (
     <img
-      src={src}
+      src={current}
       alt={alt}
       loading="lazy"
-      onError={() => setErrored(true)}
-      className={cn("select-none object-contain", className)}
+      onError={() => setIndex((i) => i + 1)}
+      className={cn("select-none object-contain", isPixelSprite(current) && "[image-rendering:pixelated]", className)}
       draggable={false}
     />
   );
