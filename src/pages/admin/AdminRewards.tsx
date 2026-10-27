@@ -3,7 +3,7 @@ import { Send, Coins, Backpack, PawPrint, Plus, X } from "lucide-react";
 import { RecipientPicker } from "@/components/admin/RecipientPicker";
 import { adminInput, adminLabel, adminButtonPrimary, adminButtonSecondary } from "@/components/admin/adminStyles";
 import { usePhoneContext } from "@/hooks/usePhoneContext";
-import { useSpecies } from "@/hooks/useBag";
+import { SpeciesSearch } from "@/components/phone/SpeciesSearch";
 import { useAllItemsCatalog, useCreateRewardDraft, useSendRewardBatch, useRewardBatches } from "@/hooks/useAdmin";
 import type { RecipientSelection } from "@/hooks/useAdmin";
 import type { RewardKind } from "@/types/database.types";
@@ -18,7 +18,6 @@ const KIND_TABS: { value: RewardKind; label: string; icon: typeof Coins }[] = [
 export default function AdminRewards() {
   const { profile: me } = usePhoneContext();
   const { data: catalog } = useAllItemsCatalog();
-  const { data: species } = useSpecies();
   const createDraft = useCreateRewardDraft();
   const sendBatch = useSendRewardBatch();
   const { data: batches, isLoading: batchesLoading } = useRewardBatches();
@@ -160,13 +159,7 @@ export default function AdminRewards() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
               <label className={adminLabel}>Species</label>
-              <select className={adminInput} value={pkSpecies} onChange={(e) => setPkSpecies(e.target.value)}>
-                {species?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    #{s.id} {s.name}
-                  </option>
-                ))}
-              </select>
+              <SpeciesSearch value={Number(pkSpecies)} onChange={(id) => id && setPkSpecies(String(id))} />
             </div>
             <div>
               <label className={adminLabel}>Level</label>
@@ -200,7 +193,7 @@ export default function AdminRewards() {
               <input className={adminInput} inputMode="numeric" value={pkCurrentHp} onChange={(e) => setPkCurrentHp(e.target.value)} placeholder="Full" />
             </div>
             <div>
-              <label className={adminLabel}>Starting XP</label>
+              <label className={adminLabel}>Total XP (0 = start of level)</label>
               <input className={adminInput} inputMode="numeric" value={pkXp} onChange={(e) => setPkXp(e.target.value)} />
             </div>
             <div className="flex items-end pb-2">

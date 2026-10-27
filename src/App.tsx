@@ -14,6 +14,8 @@ import Notifications from "@/pages/Notifications";
 import Settings from "@/pages/Settings";
 import PokemonCenter from "@/pages/PokemonCenter";
 import Battle from "@/pages/Battle";
+import Team from "@/pages/Team";
+import Cards from "@/pages/Cards";
 import NotFound from "@/pages/NotFound";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
@@ -45,6 +47,8 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/pokemon-center" element={<PokemonCenter />} />
           <Route path="/battle" element={<Battle />} />
+          <Route path="/team" element={<Team />} />
+          <Route path="/cards" element={<Cards />} />
         </Route>
       </Route>
 

@@ -28,6 +28,7 @@ import {
   locationsEqual,
   type PokemonLocation,
 } from "@/hooks/usePc";
+import { PcListView, PcModeToggle } from "@/components/phone/PcListView";
 import type { TrainerPokemon } from "@/types/database.types";
 
 const PARTY_SLOTS = 6;
@@ -37,7 +38,17 @@ interface SlotInfo {
   occupant: TrainerPokemon | null;
 }
 
+/**
+ * PC (PokéGear 11): "All Pokémon" — one searchable, filterable list of every
+ * Pokémon the trainer owns, Team and boxes together — is the default; the
+ * original drag-and-drop box grid is one tap away.
+ */
 export default function PC() {
+  const [mode, setMode] = React.useState<"list" | "boxes">("list");
+  return mode === "list" ? <PcListView onShowBoxes={() => setMode("boxes")} /> : <PcBoxes onShowList={() => setMode("list")} />;
+}
+
+function PcBoxes({ onShowList }: { onShowList: () => void }) {
   const { data: pokemon = [], isLoading: pokemonLoading } = useTrainerPokemon();
   const { data: boxes = [], isLoading: boxesLoading } = usePcBoxes();
   const movePokemon = useMovePokemon();
@@ -128,6 +139,7 @@ export default function PC() {
     >
       <div className="flex h-full flex-col">
         <AppScreenHeader title="PC" subtitle="Pokémon Storage" icon={<HardDrive className="h-5 w-5" strokeWidth={1.75} />} />
+        <PcModeToggle mode="boxes" onChange={onShowList} />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {pokemonLoading || boxesLoading ? (

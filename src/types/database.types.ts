@@ -13,6 +13,7 @@ export type PokemonType =
   | "flying" | "psychic" | "bug" | "rock" | "ghost" | "dragon" | "dark" | "steel" | "fairy";
 export type MoveCategory = "physical" | "special";
 export type RewardSplitMode = "equal" | "per_player" | "custom";
+export type TcgLanguage = "en" | "de" | "fr" | "it" | "es" | "pt-br";
 export type BattleTargetType = "trainer_pokemon" | "enemy" | "system";
 /** items_catalog.battle_effect — see 0009_battle_data.sql. */
 export interface ItemBattleEffect {
@@ -72,6 +73,7 @@ export interface Database {
           role: UserRole;
           created_at: string;
           notification_prefs: NotificationPrefs;
+          tcg_language: TcgLanguage;
         };
         Insert: {
           id?: string;
@@ -87,6 +89,7 @@ export interface Database {
           role?: UserRole;
           created_at?: string;
           notification_prefs?: NotificationPrefs;
+          tcg_language?: TcgLanguage;
         };
         Update: {
           id?: string;
@@ -102,6 +105,7 @@ export interface Database {
           role?: UserRole;
           created_at?: string;
           notification_prefs?: NotificationPrefs;
+          tcg_language?: TcgLanguage;
         };
         Relationships: [
           {
@@ -932,6 +936,47 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      tcg_collection: {
+        Row: {
+          id: string;
+          profile_id: string;
+          card_id: string;
+          lang: TcgLanguage;
+          quantity: number;
+          is_favorite: boolean;
+          name: string;
+          category: string | null;
+          dex_ids: number[];
+          set_id: string | null;
+          set_name: string | null;
+          local_id: string | null;
+          set_total: number | null;
+          rarity: string | null;
+          hp: number | null;
+          types: string[];
+          image_url: string | null;
+          card_data: Record<string, unknown>;
+          added_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      tcg_card_links: {
+        Row: { id: string; collection_id: string; pokemon_id: string; profile_id: string; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "tcg_card_links_collection_id_fkey";
+            columns: ["collection_id"];
+            isOneToOne: false;
+            referencedRelation: "tcg_collection";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       trainer_pokemon_moves: {
         Row: { pokemon_id: string; slot: number; move_id: number };
         Insert: { pokemon_id: string; slot: number; move_id: number };
@@ -1118,6 +1163,17 @@ export interface Database {
       };
       claim_battle_xp: { Args: { p_recipient_id: string; p_pokemon_id: string }; Returns: unknown };
       heal_party: { Args: { p_pokemon_ids?: string[] | null }; Returns: unknown };
+      move_pokemon_to_team: { Args: { p_pokemon_id: string }; Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"] };
+      move_pokemon_to_pc: { Args: { p_pokemon_id: string }; Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"] };
+      repair_pokemon_locations: {
+        Args: Record<string, never>;
+        Returns: { pokemon_id: string; owner: string; pokemon: string; problem: string; moved_to: string }[];
+      };
+      tcg_add_card: { Args: { p_card: unknown; p_lang: TcgLanguage }; Returns: unknown };
+      tcg_remove_card: { Args: { p_collection_id: string; p_all?: boolean }; Returns: number };
+      tcg_set_favorite: { Args: { p_collection_id: string; p_favorite: boolean }; Returns: void };
+      tcg_link_card: { Args: { p_collection_id: string; p_pokemon_id: string }; Returns: unknown };
+      tcg_unlink_card: { Args: { p_link_id: string }; Returns: void };
       suggest_moves: {
         Args: { p_type1: string; p_type2: string | null; p_level: number };
         Returns: Database["public"]["Tables"]["moves"]["Row"][];
@@ -1414,3 +1470,6 @@ export interface XpClaimResult {
   species_after: number;
   species_after_name: string;
 }
+
+export type TcgCollectionEntry = Database["public"]["Tables"]["tcg_collection"]["Row"];
+export type TcgCardLink = Database["public"]["Tables"]["tcg_card_links"]["Row"];
