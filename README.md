@@ -420,6 +420,76 @@ The Admin give-Pokémon forms (Users page and Rewards composer) now cover specie
 - The one-click "Give Pokémon" on the Users page derives max KP from level (`level × 3 + 10`); the Rewards composer lets you set it exactly.
 - This phase was type-checked and production-built but, as with earlier phases, not executed against a live Supabase project from here — treat your first run of the migration as the real test.
 
+## PokéGear 10.0: Admin-controlled battle encounters
+
+New in `supabase/migrations/0009_battle_data.sql` and `0010_battle_engine.sql`. Run them **in order, after 0001–0008**, in the SQL Editor. Both are additive: existing trainers, Pokémon, items and old encounters keep working. (Realtime is switched on for `battle_enemies`, `battle_players` and `battle_reward_recipients`; if your project reports otherwise, enable replication for them under **Database → Replication**.)
+
+> `0003_pc_system.sql` also had a typo (`deferrable initial immediate` → `initially immediate`) that made it fail on a fresh database. It's fixed in the file; nothing to do on an existing project.
+
+### The flow
+
+1. **Game Master** → Admin → Battle Manager → **New encounter**: pick trainer(s), up to 6 enemy Pokémon (species, name, level, current/max KP, Atk/Def/SpA/SpD/Spe, types, up to 4 moves — all pre-filled from species and level, all editable), whether enemies counter-attack automatically, and how hard enemies hit (Gentle ×0.25 … Brutal ×1.5). A live preview shows roughly how hard each side hits.
+2. **Trainers** get an "Encounter!" splash and their battle screen opens by itself (and again after any refresh — everything lives in the database). They send out a party Pokémon, then **Fight** (choose a move and a target), use the **Bag** (Potions, Revives, status cures — real inventory, one item spent per use), or switch **Pokémon**. Damage numbers pop over the target, HP bars drain, fainted Pokémon drop out. Minimizing the battle leaves a "Battle in progress" pill on every screen.
+3. When every enemy is down the battle becomes **Victory** (or **Defeat** if every trainer runs out of usable Pokémon). The Game Master's Battle Manager jumps to it and opens the **reward popup**: money and XP, each with *Divide equally* / *Same per player* / *Custom*, a per-trainer preview, then a **Confirm Battle Rewards** summary before anything is paid.
+4. Each trainer gets one "Battle Reward!" notification and a prompt to **choose which Pokémon receives the XP**; level-ups and evolutions apply through the existing XP curve and evolution rules.
+
+### Damage
+
+Server-side only (`calc_damage`): the main-series formula — level, move power, the attacker's Attack/Sp. Atk vs. the defender's Defense/Sp. Def — × STAB 1.5 × type chart (full 18-type chart, immunities included) × critical 1.5 (1/16 chance) × random 0.85–1.00 × burn, then × `battle_damage_scale` (default **5**) so hits land around 10–130 KP. Moves can miss (accuracy). Paralysis, sleep, freeze, poison and burn are honoured. The faster Pokémon (Speed) strikes first.
+
+Trainer Pokémon stats are `40 + 6 × level` plus an optional per-stat bonus, so level-ups raise them automatically. Moves default to the strongest same-type moves for the Pokémon's types and level; the Game Master can set exact moves and bonuses per Pokémon from **Users → (trainer) → ⚔ icon** on any Pokémon.
+
+**Tuning for this campaign:** trainer Pokémon here often have small KP pools (the Users page gives `level × 3 + 10`). Big numbers against enemies are the point, but use the *Enemy damage* setting (or lower enemy Atk/SpA) so enemies don't one-shot the team — the create form warns you when they would. Global knob: `update public.game_config set value = '3' where key = 'battle_damage_scale';`
+
+### Security
+
+Every action is a `security definer` function; the client only sends intent ("use move 26 on enemy X"). Trainers can't write enemies, logs, items, money, rewards or XP claims at all. Fixed along the way:
+- **Critical (pre-existing):** the Phase 8 profile guard treated an unset setting as "bypass", so on a fresh connection a trainer could set their own `money` — or `role = 'admin'` — with a plain update. Now null-safe; SQL-editor/service-role edits (no signed-in user) still work, so promoting an admin with `update profiles set role = 'admin' …` is unchanged.
+- Trainers could set their own `xp`, `is_shiny`, `is_dead` directly (columns added after the guard was written) — now protected.
+- `apply_evolution` was callable by anyone through the API (evolve any Pokémon into anything) — now internal only.
+- Trainers can no longer edit their own KP/XP from the Pokémon screen; battles, items, the Pokémon Center and battle rewards are how those change. To restore the old table-top behaviour: `update public.game_config set value = 'true' where key = 'player_self_edit';` (still blocked during a battle).
+- Rewards: one `battle_rewards` row per encounter (unique) + an encounter row lock, so double clicks, refreshes or two admins can't pay twice; all trainers are paid in one transaction or none are; the admin's reviewed distribution is re-checked server-side. XP claims are stamped once. Every payout is recorded in the new `money_transactions` ledger (admin money edits from the Users page are logged there too from now on).
+
+### Fewer notifications
+
+No more persistent notifications for fainting, healing, reviving, "battle ended" or battle XP — those show on the battle screen, battle log, HP bars and animations instead. Kept: battle rewards (one per trainer), money/item/Pokémon received, level up, evolution. (The "Pokémon received!" trigger could also silently skip on some connections; fixed.)
+
+### Pokémon Center
+
+**Heal entire party** (or **Select** several and heal/revive them together) in one call (`heal_party`), with a machine animation that restores each Pokémon in turn before "Your Pokémon are fully healed!". Healing now also clears status conditions. The Center is closed to trainers while they're in an active battle.
+
+### Notes
+
+- The old manual KP-tracker encounters (Phase 9) still open in the Battle Manager; new encounters are always the new kind.
+- Admin pages now show toasts (they were being called but never rendered).
+- Tested end-to-end against PostgreSQL 16 with Supabase-style roles and RLS: creation, attacks, immunities, items, switching, status conditions, victory, defeat, all reward modes including rounding (₽1,000 ÷ 3 = 334/333/333), duplicate-reward and duplicate-XP attempts, and direct-API cheating attempts. Not yet run against a live Supabase project.
+- **Frontend not yet compiled:** the npm registry was unreachable from the build machine, so the new React code was syntax-checked (every file parses) and the reward-split / damage math unit-tested, but `tsc` and `vite build` haven't run. Run `npm ci && npm run build` before deploying and fix any type errors it reports.
+
+## PokéGear 11.0: XP rework, Team/PC, Pokémon search, TCG cards
+
+### Deploying
+1. In the Supabase SQL editor run `supabase/migrations/0011_pokegear_v11.sql` (**after** 0010). It is safe to run once; the XP conversion and the PC repair are guarded so a second run changes nothing.
+2. Push to `main` — GitHub Actions runs the full `tsc -b && vite build` type check and deploys.
+
+### XP (total-based)
+- XP is a running total. Thresholds: Lv2 10 · Lv3 25 · Lv4 45 · Lv5 70 · Lv6 100 · Lv7 140 · Lv8 200 (max level 8). Stored in `game_config.xp_curve`; the SQL `xp_for_level()` and the frontend `src/lib/xp.ts` read the same curve.
+- Overflow carries over, several level-ups can happen at once (one notification each), every level-up gives +5 max KP (`game_config.level_up_max_hp`). Only the server changes XP.
+- Existing Pokémon kept their level; old "XP into this level" was added on top of the new level start (capped below the next level).
+
+### Team & PC
+- New **Team** app (6 slots, sprite/level/KP/XP/types, To PC, fill empty slots from the PC). The PC opens in a searchable/filterable list view (name, dex no., type, level, shiny, favourite, team/PC); the old box grid is one tap away.
+- The database now guarantees each Pokémon is in exactly one valid place: box must belong to the owner and the slot must fit the box; the Team can't become empty; no Team changes during an active battle.
+- `select repair_pokemon_locations();` (admin / SQL editor) moves any Pokémon in an invalid place to the first free PC slot and logs it — it never deletes anything. It already ran once in the migration.
+
+### Pokémon search & sprites
+- All 1,025 species are in the database; every species dropdown is now a search-as-you-type picker.
+- All sprites go through `src/lib/sprites.ts` (classic pixel sprites with automatic fallbacks).
+
+### TCG cards (Cards app)
+- Card data comes from the free public TCGdex API (no key, nothing secret in the app). Each player picks a card language.
+- Search by name, set, number or card ID; add copies to *My Cards*; search/filter/sort/favourite/remove; link cards to your RPG Pokémon (a card can be linked as many times as you own copies). The GM can view any player's collection (read-only) in Manage User.
+- TCG cards are separate from the RPG — they never change stats or battles.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
