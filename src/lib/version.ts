@@ -1,2 +1,2 @@
 /** The version shown in the admin panel. */
-export const APP_VERSION = "PokéGear Version 12.1";
+export const APP_VERSION = "PokéGear Version 13";

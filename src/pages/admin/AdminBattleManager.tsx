@@ -1,12 +1,14 @@
 import * as React from "react";
-import { Plus, Swords, Users, ScrollText, Gift, History, Radio } from "lucide-react";
+import { Plus, Swords, Users, ScrollText, Gift, History, Radio, Bookmark, CircleDot, User, Shield, Leaf } from "lucide-react";
 import { adminButtonPrimary, adminButtonSecondary } from "@/components/admin/adminStyles";
 import { KpEditor } from "@/components/phone/KpEditor";
 import { HpBar } from "@/components/phone/HpBar";
 import { SpriteImage } from "@/components/phone/SpriteImage";
 import { BattleSprite } from "@/components/battle/BattleBits";
 import { BattleMonitor, STATUS_STYLE } from "@/components/admin/battle/BattleMonitor";
-import { CreateBattleModal } from "@/components/admin/battle/CreateBattleModal";
+import { EncounterEditor } from "@/components/admin/encounters/EncounterEditor";
+import { CatchRequestsTab, LibraryPokemonTab, SavedEncountersTab, TeamsTab, TrainersTab } from "@/components/admin/encounters/ManagerTabs";
+import { usePendingCatchCount, type TemplateWithEntries } from "@/hooks/useEncounterManager";
 import { pokemonSpriteUrl } from "@/lib/sprites";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -14,23 +16,32 @@ import { useAdjustEnemyKp, useEndEncounter, useBattleParticipants, useBattleLogs
 import { useAdminEncounterList } from "@/hooks/useEncounter";
 import type { BattleEncounter } from "@/types/database.types";
 
-type Tab = "live" | "reward" | "history";
+type BattleTab = "live" | "reward" | "history";
+type Tab = BattleTab | "saved" | "catches" | "trainers" | "teams" | "pokemon";
 
 const TABS: { value: Tab; label: string; icon: typeof Radio }[] = [
-  { value: "live", label: "Live", icon: Radio },
+  { value: "live", label: "Active", icon: Radio },
   { value: "reward", label: "Needs reward", icon: Gift },
-  { value: "history", label: "History", icon: History },
+  { value: "history", label: "Completed", icon: History },
+  { value: "saved", label: "Saved", icon: Bookmark },
+  { value: "catches", label: "Catch requests", icon: CircleDot },
+  { value: "trainers", label: "Trainers", icon: User },
+  { value: "teams", label: "Teams", icon: Shield },
+  { value: "pokemon", label: "Pokémon", icon: Leaf },
 ];
 
-function tabOf(e: BattleEncounter): Tab {
+const BATTLE_TABS: Tab[] = ["live", "reward", "history"];
+
+function tabOf(e: BattleEncounter): BattleTab {
   if (e.status === "active") return "live";
   if (e.mode === "auto" && (e.status === "completed" || e.status === "lost")) return "reward";
   return "history";
 }
 
 /**
- * Game Master battle control room (PokéGear 10.0): create encounters for
- * chosen trainers, watch them live, and hand out rewards when they end.
+ * Encounter Manager (PokéGear 13; the battle control room since 10.0):
+ * create quick or saved encounters, run them live, hand out rewards, decide
+ * catch attempts, and keep a library of trainers, teams and Pokémon.
  * Older manual ("table-top") encounters still open in their original panel.
  */
 export default function AdminBattleManager() {
@@ -38,6 +49,8 @@ export default function AdminBattleManager() {
   const [tab, setTab] = React.useState<Tab>("live");
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [editTemplate, setEditTemplate] = React.useState<TemplateWithEntries | null>(null);
+  const pendingCatches = usePendingCatchCount();
   const [rewardPromptFor, setRewardPromptFor] = React.useState<string | null>(null);
 
   // When a live battle finishes (all enemies down, or all trainers out),
@@ -58,31 +71,36 @@ export default function AdminBattleManager() {
     prevStatus.current = new Map(encounters.map((e) => [e.id, e.status]));
   }, [encounters]);
 
-  const counts = { live: 0, reward: 0, history: 0 };
-  for (const e of encounters ?? []) counts[tabOf(e)] += 1;
+  const counts: Partial<Record<Tab, number>> = { live: 0, reward: 0, history: 0, catches: pendingCatches };
+  for (const e of encounters ?? []) counts[tabOf(e)] = (counts[tabOf(e)] ?? 0) + 1;
   const visible = (encounters ?? []).filter((e) => tabOf(e) === tab);
   const selected = encounters?.find((e) => e.id === selectedId) ?? null;
   const clearPrompt = React.useCallback(() => setRewardPromptFor(null), []);
+  const openBattle = (id: string) => {
+    setCreateOpen(false);
+    setEditTemplate(null);
+    setTab("live");
+    setSelectedId(id);
+  };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-slate-50">Battle Manager</h1>
-          <button type="button" className={`${adminButtonPrimary} flex items-center gap-1.5 !px-3 !py-1.5 text-xs`} onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            New encounter
-          </button>
-        </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-slate-50">Encounter Manager</h1>
+        <button type="button" className={`${adminButtonPrimary} flex items-center gap-1.5`} onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Create encounter
+        </button>
+      </div>
 
-        <div className="flex rounded-lg bg-white/5 p-0.5">
+      <div className="flex flex-wrap gap-1 rounded-lg bg-white/5 p-0.5">
           {TABS.map((t) => (
             <button
               key={t.value}
               type="button"
               onClick={() => setTab(t.value)}
               className={cn(
-                "flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium",
+                "flex items-center justify-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium",
                 tab === t.value ? "bg-volt text-screen-ink" : "text-slate-300 hover:bg-white/5"
               )}
             >
@@ -93,8 +111,23 @@ export default function AdminBattleManager() {
               ) : null}
             </button>
           ))}
-        </div>
+      </div>
 
+      {tab === "saved" ? (
+        <SavedEncountersTab onEdit={setEditTemplate} onStarted={openBattle} />
+      ) : tab === "catches" ? (
+        <CatchRequestsTab />
+      ) : tab === "trainers" ? (
+        <TrainersTab />
+      ) : tab === "teams" ? (
+        <TeamsTab />
+      ) : tab === "pokemon" ? (
+        <LibraryPokemonTab />
+      ) : null}
+
+      {BATTLE_TABS.includes(tab) ? (
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div className="space-y-3">
         <div className="space-y-2">
           {isLoading ? (
             <p className="text-sm text-slate-500">Loading…</p>
@@ -153,14 +186,17 @@ export default function AdminBattleManager() {
         )}
       </div>
 
-      <CreateBattleModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(id) => {
+      </div>
+      ) : null}
+
+      <EncounterEditor
+        open={createOpen || !!editTemplate}
+        template={editTemplate}
+        onClose={() => {
           setCreateOpen(false);
-          setTab("live");
-          setSelectedId(id);
+          setEditTemplate(null);
         }}
+        onStarted={openBattle}
       />
     </div>
   );

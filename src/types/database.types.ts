@@ -502,6 +502,8 @@ export interface Database {
           is_favorite: boolean;
           caught_at: string;
           updated_at: string;
+          origin: string | null;
+          origin_encounter_id: string | null;
           party_slot: number | null;
           box_id: string | null;
           box_slot: number | null;
@@ -529,6 +531,8 @@ export interface Database {
           is_favorite?: boolean;
           caught_at?: string;
           updated_at?: string;
+          origin?: string | null;
+          origin_encounter_id?: string | null;
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
@@ -556,6 +560,8 @@ export interface Database {
           is_favorite?: boolean;
           caught_at?: string;
           updated_at?: string;
+          origin?: string | null;
+          origin_encounter_id?: string | null;
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
@@ -705,6 +711,9 @@ export interface Database {
           phase: "initiative" | "fighting";
           round: number;
           turn_position: number | null;
+          template_id: string | null;
+          kind: EncounterKind;
+          catching_allowed: boolean;
         };
         Insert: {
           id?: string;
@@ -728,6 +737,9 @@ export interface Database {
           phase?: "initiative" | "fighting";
           round?: number;
           turn_position?: number | null;
+          template_id?: string | null;
+          kind?: EncounterKind;
+          catching_allowed?: boolean;
         };
         Update: {
           id?: string;
@@ -751,6 +763,9 @@ export interface Database {
           phase?: "initiative" | "fighting";
           round?: number;
           turn_position?: number | null;
+          template_id?: string | null;
+          kind?: EncounterKind;
+          catching_allowed?: boolean;
         };
         Relationships: [];
       };
@@ -944,6 +959,48 @@ export interface Database {
           created_by: string | null;
           created_at: string;
         };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      gm_trainers: {
+        Row: GmTrainer;
+        Insert: Partial<GmTrainer> & { name: string };
+        Update: Partial<GmTrainer>;
+        Relationships: [];
+      };
+      gm_pokemon: {
+        Row: GmPokemon;
+        Insert: Partial<GmPokemon> & { name: string; max_hp: number; current_hp: number };
+        Update: Partial<GmPokemon>;
+        Relationships: [];
+      };
+      gm_teams: {
+        Row: GmTeam;
+        Insert: Partial<GmTeam> & { name: string };
+        Update: Partial<GmTeam>;
+        Relationships: [];
+      };
+      gm_team_members: {
+        Row: { team_id: string; gm_pokemon_id: string; position: number };
+        Insert: { team_id: string; gm_pokemon_id: string; position: number };
+        Update: { team_id?: string; gm_pokemon_id?: string; position?: number };
+        Relationships: [];
+      };
+      encounter_templates: {
+        Row: EncounterTemplate;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      encounter_template_entries: {
+        Row: EncounterTemplateEntryRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      catch_attempts: {
+        Row: CatchAttempt;
         Insert: never;
         Update: never;
         Relationships: [];
@@ -1224,6 +1281,37 @@ export interface Database {
         };
         Returns: unknown;
       };
+      allocate_battle_xp: { Args: { p_recipient_id: string; p_pokemon_id: string; p_amount: number }; Returns: unknown };
+      admin_close_xp_pool: { Args: { p_recipient_id: string }; Returns: number };
+      get_my_xp_pools: { Args: Record<string, never>; Returns: unknown };
+      admin_save_encounter_template: {
+        Args: {
+          p_template_id: string | null;
+          p_name: string;
+          p_description: string | null;
+          p_kind: EncounterKind;
+          p_catching_allowed: boolean;
+          p_default_player_ids: string[];
+          p_entries: EncounterEntry[];
+        };
+        Returns: string;
+      };
+      admin_duplicate_encounter_template: { Args: { p_template_id: string }; Returns: string };
+      admin_start_encounter: {
+        Args: {
+          p_template_id: string | null;
+          p_name: string | null;
+          p_description: string | null;
+          p_kind: EncounterKind | null;
+          p_catching_allowed: boolean | null;
+          p_player_ids: string[];
+          p_entries: EncounterEntry[] | null;
+        };
+        Returns: string;
+      };
+      admin_set_trainer_active: { Args: { p_trainer_row: string; p_enemy_id: string }; Returns: void };
+      battle_attempt_catch: { Args: { p_encounter_id: string; p_enemy_id: string; p_ball_item_id: string }; Returns: unknown };
+      admin_resolve_catch: { Args: { p_attempt_id: string; p_caught: boolean }; Returns: unknown };
       battle_turn_attack: { Args: { p_encounter_id: string; p_target_enemy_id: string; p_damage: number }; Returns: unknown };
       battle_submit_initiative: { Args: { p_encounter_id: string; p_roll: number }; Returns: void };
       admin_set_initiative: { Args: { p_entry_id: string; p_roll: number }; Returns: void };
@@ -1347,6 +1435,14 @@ export interface BattleEnemyState {
   type1: PokemonType;
   type2: PokemonType | null;
   fainted: boolean;
+  /** PokéGear 13 */
+  enemy_trainer_id: string | null;
+  team_position: number | null;
+  /** Standing, not caught, and wild or its trainer's active Pokémon. */
+  on_field: boolean;
+  caught: boolean;
+  caught_by_name: string | null;
+  catchable: boolean;
   /** Game Master only */
   attack?: number;
   defense?: number;
@@ -1388,8 +1484,9 @@ export interface BattlePartyPokemon extends BattleActivePokemon {
 /** One place in the initiative / turn order (PokéGear 12.1). */
 export interface BattleTurnEntry {
   id: string;
-  kind: "player" | "enemy";
+  kind: "player" | "enemy" | "trainer";
   battle_player_id: string | null;
+  enemy_trainer_id: string | null;
   profile_id: string | null;
   enemy_id: string | null;
   name: string;
@@ -1466,6 +1563,8 @@ export interface BattleState {
   logs: BattleLogEntry[];
   reward: BattleRewardState | null;
   order: BattleTurnEntry[];
+  enemy_trainers: BattleEnemyTrainer[];
+  catches: BattleCatch[];
   me?: {
     battle_player_id: string;
     profile_id: string;
@@ -1473,7 +1572,41 @@ export interface BattleState {
     damage_dealt: number;
     party: BattlePartyPokemon[];
     items: BattleBagItem[];
+    balls: BattleBall[];
   };
+}
+
+export interface BattleEnemyTrainer {
+  id: string;
+  name: string;
+  species_id: number | null;
+  sprite_url: string | null;
+  position: number;
+  active_enemy_id: string | null;
+  remaining: number;
+  total: number;
+}
+
+export interface BattleCatch {
+  id: string;
+  enemy_id: string;
+  profile_id: string;
+  username: string;
+  pokemon_name: string;
+  ball_name: string | null;
+  status: CatchStatus;
+  created_at: string;
+  resolved_at: string | null;
+  note: string | null;
+}
+
+export interface BattleBall {
+  item_id: string;
+  name: string;
+  quantity: number;
+  pokeapi_slug: string | null;
+  icon_url: string | null;
+  icon_emoji: string | null;
 }
 
 /** One step of a resolved battle action, played back in order by the battle screen. */
@@ -1546,3 +1679,145 @@ export interface XpClaimResult {
 export type TcgCollectionEntry = Database["public"]["Tables"]["tcg_collection"]["Row"];
 export type TcgCardLink = Database["public"]["Tables"]["tcg_card_links"]["Row"];
 export type PokemonHpEvent = Database["public"]["Tables"]["pokemon_hp_events"]["Row"];
+
+// ---------------------------------------------------------------------------
+// PokéGear 13: Encounter Manager, catching, XP pools
+// ---------------------------------------------------------------------------
+export type EncounterKind = "wild" | "trainer" | "gym" | "rival" | "boss" | "arena" | "story" | "team" | "custom";
+export type CatchStatus = "pending" | "caught" | "not_caught" | "cancelled";
+
+export interface GmTrainer {
+  id: string;
+  name: string;
+  description: string | null;
+  species_id: number | null;
+  sprite_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GmPokemon {
+  id: string;
+  species_id: number | null;
+  name: string;
+  level: number;
+  max_hp: number;
+  current_hp: number;
+  status: PokemonStatus;
+  trainer_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GmTeam {
+  id: string;
+  name: string;
+  description: string | null;
+  trainer_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EncounterTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  kind: EncounterKind;
+  catching_allowed: boolean;
+  default_player_ids: string[];
+  created_by: string | null;
+  times_started: number;
+  last_started_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EncounterTemplateEntryRow {
+  id: string;
+  template_id: string;
+  position: number;
+  entry_kind: "trainer" | "team" | "pokemon" | "wild";
+  trainer_id: string | null;
+  team_id: string | null;
+  gm_pokemon_id: string | null;
+  species_id: number | null;
+  name: string | null;
+  level: number | null;
+  max_hp: number | null;
+  quantity: number;
+}
+
+/** One thing in an encounter (sent to admin_save_encounter_template / admin_start_encounter). */
+export type EncounterEntry =
+  | { kind: "trainer"; trainer_id: string; team_id?: string | null }
+  | { kind: "team"; team_id: string }
+  | { kind: "pokemon"; gm_pokemon_id: string }
+  | { kind: "wild"; species_id?: number | null; name?: string | null; level: number; max_hp: number; quantity: number };
+
+export interface CatchAttempt {
+  id: string;
+  encounter_id: string;
+  enemy_id: string;
+  profile_id: string;
+  ball_item_id: string | null;
+  ball_name: string | null;
+  pokemon_name: string;
+  status: CatchStatus;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  result_pokemon_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface XpPoolPokemon {
+  id: string;
+  name: string;
+  species_id: number;
+  is_shiny: boolean;
+  level: number;
+  xp: number;
+  /** XP needed to reach the next level; null at the max level. */
+  needed: number | null;
+  is_dead: boolean;
+}
+
+export interface XpPool {
+  recipient_id: string;
+  encounter_id: string;
+  encounter_name: string;
+  total: number;
+  allocated: number;
+  remaining: number;
+  allocations: { pokemon_name: string; amount: number; level_before: number; level_after: number; evolved_to: string | null }[];
+  pokemon: XpPoolPokemon[];
+}
+
+export interface XpAllocationResult {
+  pokemon_id: string;
+  name: string;
+  used: number;
+  level_before: number;
+  level_after: number;
+  leveled_up: boolean;
+  xp: number;
+  needed: number | null;
+  species_before: number;
+  species_after: number;
+  evolved_to: string | null;
+  remaining: number;
+}
+
+export const ENCOUNTER_KINDS: { value: EncounterKind; label: string }[] = [
+  { value: "wild", label: "Wild Pokémon" },
+  { value: "trainer", label: "Trainer battle" },
+  { value: "gym", label: "Gym battle" },
+  { value: "rival", label: "Rival battle" },
+  { value: "boss", label: "Boss battle" },
+  { value: "arena", label: "Arena battle" },
+  { value: "story", label: "Story battle" },
+  { value: "team", label: "Team battle" },
+  { value: "custom", label: "Custom" },
+];

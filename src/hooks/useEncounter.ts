@@ -10,7 +10,8 @@ import type {
   PartyHealResult,
   PokemonBattleProfile,
   RewardSplitMode,
-  XpClaimResult,
+  XpAllocationResult,
+  XpPool,
 } from "@/types/database.types";
 
 /**
@@ -117,6 +118,8 @@ export function useBattleState(encounterId: string | null) {
       { table: "battle_enemies", filter: `encounter_id=eq.${encounterId}` },
       { table: "battle_players", filter: `encounter_id=eq.${encounterId}` },
       { table: "battle_turn_order", filter: `encounter_id=eq.${encounterId}` },
+      { table: "battle_enemy_trainers", filter: `encounter_id=eq.${encounterId}` },
+      { table: "catch_attempts", filter: `encounter_id=eq.${encounterId}` },
     ],
     [["battle_state", encounterId]]
   );
@@ -141,7 +144,8 @@ function useInvalidateAfterBattleAction() {
 export type BattleAction =
   | { kind: "attack"; encounterId: string; targetEnemyId: string; damage: number }
   | { kind: "item"; encounterId: string; itemId: string; pokemonId: string }
-  | { kind: "switch"; encounterId: string; pokemonId: string };
+  | { kind: "switch"; encounterId: string; pokemonId: string }
+  | { kind: "catch"; encounterId: string; enemyId: string; ballItemId: string };
 
 /**
  * One trainer action. Errors are handled by the caller (shown in the battle
@@ -165,10 +169,16 @@ export function useBattleAction() {
                 p_item_id: action.itemId,
                 p_pokemon_id: action.pokemonId,
               })
-            : await supabase.rpc("battle_choose_pokemon", {
-                p_encounter_id: action.encounterId,
-                p_pokemon_id: action.pokemonId,
-              });
+            : action.kind === "catch"
+              ? await supabase.rpc("battle_attempt_catch", {
+                  p_encounter_id: action.encounterId,
+                  p_enemy_id: action.enemyId,
+                  p_ball_item_id: action.ballItemId,
+                })
+              : await supabase.rpc("battle_choose_pokemon", {
+                  p_encounter_id: action.encounterId,
+                  p_pokemon_id: action.pokemonId,
+                });
       if (res.error) throw res.error;
       return res.data as BattleActionResult;
     },
@@ -192,57 +202,56 @@ export function useSubmitInitiative() {
 // ---------------------------------------------------------------------------
 // Battle-reward XP: the trainer picks which Pokémon receives it.
 // ---------------------------------------------------------------------------
-export interface PendingXpReward {
-  id: string;
-  encounter_id: string;
-  money: number;
-  xp: number;
-  created_at: string;
-  encounter: Pick<BattleEncounter, "id" | "name" | "status"> | null;
-}
-
-export function usePendingXpRewards() {
+/** Open battle-XP pools of the trainer (PokéGear 13), kept live. */
+export function useMyXpPools() {
   const { data: profile } = useProfile();
   const query = useQuery({
-    queryKey: ["pending_xp_rewards", profile?.id],
+    queryKey: ["xp_pools", profile?.id],
     enabled: !!profile,
-    queryFn: async (): Promise<PendingXpReward[]> => {
-      const { data, error } = await supabase
-        .from("battle_reward_recipients")
-        .select("id, encounter_id, money, xp, created_at, encounter:encounter_id(id, name, status)")
-        .eq("profile_id", profile!.id)
-        .is("xp_claimed_at", null)
-        .gt("xp", 0)
-        .order("created_at")
-        .returns<PendingXpReward[]>();
+    queryFn: async (): Promise<XpPool[]> => {
+      const { data, error } = await supabase.rpc("get_my_xp_pools");
       if (error) throw error;
-      return data;
+      return (data ?? []) as XpPool[];
     },
   });
 
   useRealtimeInvalidate(
-    profile ? `pending-xp-${profile.id}` : null,
+    profile ? `xp-pools-${profile.id}` : null,
     [{ table: "battle_reward_recipients", filter: `profile_id=eq.${profile?.id}` }],
-    [["pending_xp_rewards", profile?.id], ["profile"], ["notifications", profile?.id], ["my_battle", profile?.id]]
+    [["xp_pools", profile?.id], ["profile"], ["notifications", profile?.id], ["my_battle", profile?.id]]
   );
 
   return query;
 }
 
-export function useClaimBattleXp() {
+/** Give part of a pool to one Pokémon that fought. */
+export function useAllocateXp() {
   const { data: profile } = useProfile();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ recipientId, pokemonId }: { recipientId: string; pokemonId: string }) => {
-      const { data, error } = await supabase.rpc("claim_battle_xp", { p_recipient_id: recipientId, p_pokemon_id: pokemonId });
+    mutationFn: async ({ recipientId, pokemonId, amount }: { recipientId: string; pokemonId: string; amount: number }) => {
+      const { data, error } = await supabase.rpc("allocate_battle_xp", {
+        p_recipient_id: recipientId,
+        p_pokemon_id: pokemonId,
+        p_amount: amount,
+      });
       if (error) throw error;
-      return data as XpClaimResult;
+      return data as unknown as XpAllocationResult;
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["pending_xp_rewards", profile?.id] });
+      queryClient.invalidateQueries({ queryKey: ["xp_pools", profile?.id] });
       queryClient.invalidateQueries({ queryKey: ["trainer_pokemon", profile?.id] });
       queryClient.invalidateQueries({ queryKey: ["notifications", profile?.id] });
     },
+  });
+}
+
+/** GM: close an XP pool that can't be used up (what's left is forfeited). */
+export function useAdminCloseXpPool() {
+  return useAdminBattleMutation(async ({ recipientId }: { recipientId: string }) => {
+    const { data, error } = await supabase.rpc("admin_close_xp_pool", { p_recipient_id: recipientId });
+    if (error) throw error;
+    return data as number;
   });
 }
 
@@ -392,6 +401,31 @@ export function useAdminEnemyTurnAttack() {
       return data as BattleActionResult;
     }
   );
+}
+
+/** GM: Caught / Not caught for a catch attempt (atomic on the server). */
+export function useAdminResolveCatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ attemptId, caught }: { attemptId: string; caught: boolean }) => {
+      const { data, error } = await supabase.rpc("admin_resolve_catch", { p_attempt_id: attemptId, p_caught: caught });
+      if (error) throw error;
+      return data as { status: "caught" | "not_caught"; pokemon_name: string; placed?: "team" | "pc" };
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["battle_state"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "catch_attempts"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "profile_pokemon"] });
+    },
+  });
+}
+
+/** GM: switch an enemy trainer's active Pokémon. */
+export function useAdminSetTrainerActive() {
+  return useAdminBattleMutation(async ({ trainerRowId, enemyId }: { trainerRowId: string; enemyId: string }) => {
+    const { error } = await supabase.rpc("admin_set_trainer_active", { p_trainer_row: trainerRowId, p_enemy_id: enemyId });
+    if (error) throw error;
+  });
 }
 
 export function useAdminSkipTurn() {
