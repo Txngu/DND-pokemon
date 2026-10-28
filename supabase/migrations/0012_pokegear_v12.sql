@@ -41,9 +41,13 @@ on conflict (name) do update
 -- the GM can switch any of it back on in the Shop's admin panel). Nothing is
 -- deleted and nobody loses items they own.
 -- ---------------------------------------------------------------------------
-drop table if exists pg_temp._v12_prices;
-create temporary table _v12_prices (name text primary key, price integer not null);
-insert into _v12_prices values
+-- (A plain function instead of a temporary table: the Supabase SQL editor
+-- doesn't keep temporary tables between statements.)
+create or replace function public._v12_price_list()
+returns table (name text, price integer)
+language sql
+immutable
+as $$ values
   ('Poké Ball', 200),        -- Pokéball
   ('Great Ball', 600),       -- Superball
   ('Ultra Ball', 1200),      -- Hyperball
@@ -56,14 +60,15 @@ insert into _v12_prices values
   ('Ice Heal', 250),         -- Eisheiler
   ('Burn Heal', 250),        -- Feuerheiler
   ('Calming Remedy', 200),   -- Beruhiger
-  ('Full Heal', 700);        -- Hyperheiler
+  ('Full Heal', 700)         -- Hyperheiler
+$$;
 
 do $$
 declare
   v_missing text;
 begin
   select string_agg(p.name, ', ') into v_missing
-  from _v12_prices p left join public.items_catalog ic on ic.name = p.name
+  from public._v12_price_list() p left join public.items_catalog ic on ic.name = p.name
   where ic.id is null;
   if v_missing is not null then
     raise exception 'PokéGear 12: these shop items are missing from items_catalog: %', v_missing;
@@ -72,17 +77,17 @@ end $$;
 
 insert into public.shop_listings (item_id, price, stock, is_enabled)
 select ic.id, p.price, null, true
-from _v12_prices p join public.items_catalog ic on ic.name = p.name
+from public._v12_price_list() p join public.items_catalog ic on ic.name = p.name
 on conflict (item_id) do update set price = excluded.price, is_enabled = true;
 
 update public.items_catalog ic set value = p.price
-from _v12_prices p where ic.name = p.name and ic.value is distinct from p.price;
+from public._v12_price_list() p where ic.name = p.name and ic.value is distinct from p.price;
 
 update public.shop_listings sl set is_enabled = false
 where sl.is_enabled
-  and sl.item_id not in (select ic.id from public.items_catalog ic join _v12_prices p on p.name = ic.name);
+  and sl.item_id not in (select ic.id from public.items_catalog ic join public._v12_price_list() p on p.name = ic.name);
 
-drop table _v12_prices;
+drop function public._v12_price_list();
 
 -- ---------------------------------------------------------------------------
 -- 3. purchase_item — unchanged rules (price read from the listing, money
@@ -188,11 +193,13 @@ create trigger trainer_pokemon_touch_updated_at
 
 -- ---------------------------------------------------------------------------
 -- 5. HP history. One trigger records every change to current KP, whatever
--- caused it, so there is a single place to look. The source comes from the
--- function doing the change (pokegear.hp_source); functions that already
--- existed are tagged below with ALTER FUNCTION ... SET, which needs no
--- change to their code. (If one of them is ever re-created with CREATE OR
--- REPLACE, re-run its ALTER FUNCTION line — it'll then log as 'other'.)
+-- caused it, so there is a single place to look. The new functions below
+-- say exactly where a change came from (pokegear.hp_source). For changes
+-- made by the older functions (battles, Pokémon Center, items, level-ups)
+-- the trigger works it out: a higher max KP = level up, the owner being in
+-- a battle = battle, otherwise healing or other.
+-- (Supabase doesn't allow "ALTER FUNCTION ... SET pokegear.*", so the older
+-- functions are deliberately left untouched.)
 -- ---------------------------------------------------------------------------
 create table if not exists public.pokemon_hp_events (
   id           uuid primary key default gen_random_uuid(),
@@ -226,8 +233,15 @@ begin
   insert into public.pokemon_hp_events (pokemon_id, profile_id, previous_hp, new_hp, max_hp, delta, source, actor_id)
   values (
     new.id, new.profile_id, old.current_hp, new.current_hp, new.max_hp, new.current_hp - old.current_hp,
-    coalesce(nullif(current_setting('pokegear.hp_source', true), ''),
-             case when auth.uid() is null then 'system' else 'other' end),
+    coalesce(
+      nullif(current_setting('pokegear.hp_source', true), ''),
+      case
+        when auth.uid() is null then 'system'
+        when new.max_hp > old.max_hp then 'level_up'
+        when public.is_in_active_battle(new.profile_id) then 'battle'
+        when new.current_hp > old.current_hp then 'healing'
+        else 'other'
+      end),
     public.my_profile_id()
   );
   return null;
@@ -240,17 +254,6 @@ create trigger trainer_pokemon_log_hp
   for each row
   when (old.current_hp is distinct from new.current_hp)
   execute procedure public.log_pokemon_hp_change();
-
-alter function public.battle_attack(uuid, smallint, uuid)                set pokegear.hp_source = 'battle';
-alter function public.admin_enemy_attack(uuid, uuid, uuid)               set pokegear.hp_source = 'battle';
-alter function public.battle_use_item(uuid, uuid, uuid)                  set pokegear.hp_source = 'battle_item';
-alter function public._battle_status_chip(uuid, uuid)                    set pokegear.hp_source = 'status_effect';
-alter function public.heal_pokemon(uuid)                                 set pokegear.hp_source = 'pokemon_center';
-alter function public.revive_pokemon(uuid)                               set pokegear.hp_source = 'pokemon_center';
-alter function public.heal_party(uuid[])                                 set pokegear.hp_source = 'pokemon_center';
-alter function public.adjust_pokemon_kp(uuid, integer, text, uuid)       set pokegear.hp_source = 'kp_editor';
-alter function public.admin_set_pokemon_dead(uuid, text)                 set pokegear.hp_source = 'gm';
-alter function public._apply_pokemon_xp(uuid, integer, boolean)         set pokegear.hp_source = 'level_up';
 
 -- ---------------------------------------------------------------------------
 -- 6. Damage and direct KP setting
