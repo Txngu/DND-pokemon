@@ -1,9 +1,9 @@
 import * as React from "react";
-import { Ban, Crosshair, Dices, Flag, Gift, ScrollText, Skull, SkipForward, Swords, Trophy, UserPlus, Users } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, CircleDot, Crosshair, Dices, Flag, Gift, ScrollText, Skull, SkipForward, Swords, Trophy, UserPlus, Users } from "lucide-react";
 import { adminButtonDanger, adminButtonPrimary, adminButtonSecondary, adminInput } from "@/components/admin/adminStyles";
 import { KpEditor } from "@/components/phone/KpEditor";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
-import { BattleHpBar, BattleSprite, StatusChip, TypePill } from "@/components/battle/BattleBits";
+import { BattleHpBar, BattleSprite, StatusChip } from "@/components/battle/BattleBits";
 import { RewardModal } from "@/components/admin/battle/RewardModal";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -13,12 +13,15 @@ import {
   useAdminAddBattlePlayers,
   useAdminAdjustEnemyHp,
   useAdminEnemyTurnAttack,
+  useAdminResolveCatch,
   useAdminSetBattleStatus,
+  useAdminSetTrainerActive,
   useAdminSetInitiative,
   useAdminSkipTurn,
   useBattleState,
 } from "@/hooks/useEncounter";
-import type { BattleEncounter, BattleEvent, BattleState } from "@/types/database.types";
+import type { BattleEncounter, BattleEnemyState, BattleEvent, BattleState } from "@/types/database.types";
+import { ENCOUNTER_KINDS } from "@/types/database.types";
 
 export const STATUS_STYLE: Record<BattleEncounter["status"], { label: string; cls: string }> = {
   active: { label: "Live", cls: "bg-emerald-400/15 text-emerald-300" },
@@ -87,6 +90,8 @@ export function BattleMonitor({
             <p className="mt-0.5 text-xs text-slate-400">
               Started {new Date(enc.created_at).toLocaleString()} · {state.players.length} trainer{state.players.length === 1 ? "" : "s"}
               {enc.status === "active" ? (enc.phase === "initiative" ? " · rolling for initiative" : ` · round ${enc.round}`) : ""}
+              {" · "}
+              {ENCOUNTER_KINDS.find((k) => k.value === enc.kind)?.label ?? "Encounter"} · catching {enc.catching_allowed ? "allowed" : "not allowed"}
             </p>
             {enc.notes ? <p className="mt-1 text-xs text-slate-500">{enc.notes}</p> : null}
           </div>
@@ -117,6 +122,8 @@ export function BattleMonitor({
       </div>
 
       {enc.status === "active" && state.order.length > 0 ? <TurnCard state={state} /> : null}
+
+      {state.catches.length > 0 ? <CatchCard state={state} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <EnemiesCard state={state} />
@@ -159,40 +166,181 @@ export function BattleMonitor({
 }
 
 function EnemiesCard({ state }: { state: BattleState }) {
-  const adjust = useAdminAdjustEnemyHp();
   const active = state.encounter.status === "active";
+  const trainers = state.enemy_trainers;
+  const wild = state.enemies.filter((e) => !e.enemy_trainer_id);
+  const standing = state.enemies.filter((e) => !e.fainted && !e.caught).length;
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#111623] p-4">
       <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-100">
         <Skull className="h-4 w-4" /> Enemies
+        <span className="ml-auto text-xs font-normal text-slate-400">
+          {standing} of {state.enemies.length} standing
+        </span>
       </h3>
-      <div className="space-y-3">
-        {state.enemies.map((e) => (
-          <div key={e.id} className={cn("rounded-lg bg-white/5 p-3", e.fainted && "opacity-60")}>
-            <div className="flex items-center gap-3">
-              <BattleSprite speciesId={e.species_id} spriteUrl={e.sprite_url} alt={e.name} className={cn("h-14 w-14", e.fainted && "grayscale")} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="text-sm font-semibold text-slate-100">{e.name}</p>
-                  <span className="font-mono text-[10px] text-slate-400">Lv{e.level}</span>
-                  <TypePill type={e.type1} />
-                  <TypePill type={e.type2} />
-                  {e.fainted ? <span className="text-[10px] font-semibold uppercase text-rotom-red-light">Fainted</span> : null}
-                </div>
-                <BattleHpBar current={e.current_hp} max={e.max_hp} showNumbers className="mt-1" />
+      <div className="space-y-2">
+        {trainers.map((t) => (
+          <EnemyGroup
+            key={t.id}
+            title={t.name}
+            subtitle={`${t.remaining}/${t.total} Pokémon left`}
+            speciesId={t.species_id}
+            enemies={state.enemies.filter((e) => e.enemy_trainer_id === t.id).sort((a, b) => (a.team_position ?? 0) - (b.team_position ?? 0))}
+            activeId={t.active_enemy_id}
+            trainerRowId={t.id}
+            battleActive={active}
+          />
+        ))}
+        {wild.length ? (
+          <EnemyGroup
+            title={trainers.length ? "Wild Pokémon" : "Enemy Pokémon"}
+            subtitle={`${wild.filter((e) => !e.fainted && !e.caught).length}/${wild.length} standing`}
+            speciesId={null}
+            enemies={wild}
+            activeId={null}
+            trainerRowId={null}
+            battleActive={active}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** One trainer's team, or the wild Pokémon — collapsible, so 30+ enemies stay manageable. */
+function EnemyGroup({
+  title,
+  subtitle,
+  speciesId,
+  enemies,
+  activeId,
+  trainerRowId,
+  battleActive,
+}: {
+  title: string;
+  subtitle: string;
+  speciesId: number | null;
+  enemies: BattleEnemyState[];
+  activeId: string | null;
+  trainerRowId: string | null;
+  battleActive: boolean;
+}) {
+  const [open, setOpen] = React.useState(enemies.length <= 8);
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const adjust = useAdminAdjustEnemyHp();
+  const sendOut = useAdminSetTrainerActive();
+
+  return (
+    <div className="rounded-lg bg-white/[0.04]">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+        {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+        {speciesId ? <BattleSprite speciesId={speciesId} alt="" className="h-6 w-6" /> : null}
+        <span className={cn("text-sm font-semibold", trainerRowId ? "text-rotom-red-light" : "text-slate-100")}>{title}</span>
+        <span className="ml-auto text-[11px] text-slate-400">{subtitle}</span>
+      </button>
+      {open ? (
+        <div className="space-y-1 px-2 pb-2">
+          {enemies.map((e) => {
+            const isActive = e.id === activeId;
+            return (
+              <div key={e.id} className={cn("rounded-md bg-white/5", (e.fainted || e.caught) && "opacity-55")}>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === e.id ? null : e.id)}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
+                >
+                  <BattleSprite speciesId={e.species_id} spriteUrl={e.sprite_url} alt={e.name} className={cn("h-8 w-8 shrink-0", (e.fainted || e.caught) && "grayscale")} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-slate-100">{e.name}</span>
+                      <span className="font-mono text-[10px] text-slate-400">Lv{e.level}</span>
+                      {isActive && !e.fainted ? <span className="rounded bg-volt/20 px-1 text-[9px] font-bold uppercase text-volt">Active</span> : null}
+                      {e.caught ? (
+                        <span className="rounded bg-sky-400/20 px-1 text-[9px] font-bold uppercase text-sky-200">Caught by {e.caught_by_name}</span>
+                      ) : e.fainted ? (
+                        <span className="text-[9px] font-semibold uppercase text-rotom-red-light">Fainted</span>
+                      ) : null}
+                    </div>
+                    <BattleHpBar current={e.current_hp} max={e.max_hp} showNumbers className="mt-0.5" />
+                  </div>
+                </button>
+                {expanded === e.id && battleActive && !e.caught ? (
+                  <div className="space-y-1.5 px-2 pb-2">
+                    <KpEditor
+                      compact
+                      disabled={adjust.isPending}
+                      onAdjust={(delta) => adjust.mutate({ enemyId: e.id, delta }, { onSuccess: () => toast(`${e.name} ${delta > 0 ? "+" : ""}${delta} KP`, "info") })}
+                    />
+                    {trainerRowId && !isActive && !e.fainted ? (
+                      <button
+                        type="button"
+                        className={`${adminButtonSecondary} !px-3 !py-1 text-xs`}
+                        disabled={sendOut.isPending}
+                        onClick={() => sendOut.mutate({ trainerRowId, enemyId: e.id }, { onSuccess: () => toast(`${title} sends out ${e.name}!`, "info") })}
+                      >
+                        Send out {e.name}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            </div>
-            {active ? (
-              <div className="mt-2">
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">Adjust KP (outside the turn order)</p>
-                <KpEditor
-                  compact
-                  disabled={adjust.isPending}
-                  onAdjust={(delta) => adjust.mutate({ enemyId: e.id, delta }, { onSuccess: () => toast(`${e.name} ${delta > 0 ? "+" : ""}${delta} KP`, "info") })}
-                />
-              </div>
-            ) : null}
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Catch attempts in this battle: the GM decides. */
+function CatchCard({ state }: { state: BattleState }) {
+  const resolve = useAdminResolveCatch();
+  const pending = state.catches.filter((c) => c.status === "pending");
+  const done = state.catches.filter((c) => c.status !== "pending");
+  return (
+    <div className="rounded-xl border border-sky-400/30 bg-sky-400/[0.05] p-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+        <CircleDot className="h-4 w-4 text-sky-300" /> Catch attempts
+        {pending.length ? <span className="rounded-full bg-sky-400/25 px-2 text-[11px] text-sky-200">{pending.length} waiting</span> : null}
+      </h3>
+      <div className="space-y-1.5">
+        {pending.map((c) => (
+          <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm">
+            <span className="min-w-0 flex-1 text-slate-100">
+              <b>{c.username}</b> threw a {c.ball_name ?? "Poké Ball"} at <b>{c.pokemon_name}</b>
+            </span>
+            <button
+              type="button"
+              className={`${adminButtonPrimary} !px-3 !py-1 text-xs`}
+              disabled={resolve.isPending}
+              onClick={() => resolve.mutate({ attemptId: c.id, caught: true }, { onSuccess: (r) => toast(`✅ ${r.pokemon_name} caught by ${c.username}${r.placed === "pc" ? " (sent to PC)" : ""}`, "success") })}
+            >
+              ✅ Caught
+            </button>
+            <button
+              type="button"
+              className={`${adminButtonSecondary} !px-3 !py-1 text-xs`}
+              disabled={resolve.isPending}
+              onClick={() => resolve.mutate({ attemptId: c.id, caught: false }, { onSuccess: () => toast(`❌ ${c.pokemon_name} broke free`, "info") })}
+            >
+              ❌ Not caught
+            </button>
+          </div>
+        ))}
+        {done.map((c) => (
+          <div key={c.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400">
+            <span className="min-w-0 flex-1">
+              {c.username} → {c.pokemon_name}
+            </span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                c.status === "caught" ? "bg-emerald-400/15 text-emerald-300" : c.status === "not_caught" ? "bg-rotom-red/15 text-rotom-red-light" : "bg-white/10 text-slate-400"
+              )}
+            >
+              {c.status === "caught" ? "Caught" : c.status === "not_caught" ? "Not caught" : c.note ?? "Closed"}
+            </span>
           </div>
         ))}
       </div>
@@ -237,7 +385,7 @@ function TurnCard({ state }: { state: BattleState }) {
           <RollRow
             key={o.id}
             entry={o}
-            editable={(initiative || o.position === null) && (o.kind === "enemy" || o.awaiting || initiative)}
+            editable={(initiative || o.position === null) && (o.kind !== "player" || o.awaiting || initiative)}
             busy={setRoll.isPending}
             onSet={(roll) => setRoll.mutate({ entryId: o.id, roll }, { onSuccess: () => toast(`${o.name}: ${roll}`, "success") })}
             dimmed={!initiative && !o.can_act}
@@ -252,6 +400,16 @@ function TurnCard({ state }: { state: BattleState }) {
       ) : null}
 
       {!initiative && current?.kind === "enemy" ? <EnemyTurnForm state={state} enemyName={current.name} /> : null}
+      {!initiative && current?.kind === "trainer" ? (
+        <EnemyTurnForm
+          state={state}
+          enemyName={(() => {
+            const t = state.enemy_trainers.find((x) => x.id === current.enemy_trainer_id);
+            const e = state.enemies.find((x) => x.id === t?.active_enemy_id);
+            return t && e ? `${t.name}'s ${e.name}` : current.name;
+          })()}
+        />
+      ) : null}
       {!initiative && current?.kind === "player" ? (
         <p className="mt-3 text-xs text-slate-400">Waiting for {current.name} to act on their phone (attack, item or switch).</p>
       ) : null}
@@ -284,7 +442,10 @@ function RollRow({
       )}
     >
       <span className="w-5 shrink-0 font-mono text-slate-500">{entry.position ?? "–"}</span>
-      <span className={cn("min-w-0 flex-1 truncate", entry.kind === "enemy" ? "text-rotom-red-light" : "text-slate-100")}>{entry.name}</span>
+      <span className={cn("min-w-0 flex-1 truncate", entry.kind === "player" ? "text-slate-100" : "text-rotom-red-light")}>
+        {entry.name}
+        {entry.kind === "trainer" ? <span className="ml-1 text-[10px] text-slate-500">(trainer)</span> : null}
+      </span>
       <span className="shrink-0 font-mono text-slate-300">
         {entry.rolls.length ? entry.rolls.join(" / ") : "—"}
         {entry.awaiting ? <span className="ml-1 text-amber-300">{entry.rolls.length ? "re-roll" : "waiting"}</span> : null}

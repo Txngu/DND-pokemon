@@ -1,51 +1,42 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Sparkles, Trophy } from "lucide-react";
-import { SpriteImage } from "@/components/phone/SpriteImage";
+import { ChevronLeft, Sparkles, Trophy } from "lucide-react";
+import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { XpBar } from "@/components/phone/XpBar";
 import { EvolutionAnimation } from "@/components/phone/EvolutionAnimation";
-import { pokemonSpriteUrl } from "@/lib/sprites";
-import { formatMoney } from "@/lib/battle";
 import { cn } from "@/lib/utils";
-import { useTrainerPokemon } from "@/hooks/useBag";
-import { useGameConfig } from "@/hooks/useBattle";
-import { useClaimBattleXp, usePendingXpRewards } from "@/hooks/useEncounter";
-import type { TrainerPokemon, XpClaimResult } from "@/types/database.types";
+import { useAllocateXp, useMyXpPools } from "@/hooks/useEncounter";
+import type { XpAllocationResult, XpPool, XpPoolPokemon } from "@/types/database.types";
+
+type Summary = { pool: XpPool; lines: { pokemon_name: string; amount: number; level_before: number; level_after: number }[] };
 
 /**
- * After the Game Master hands out battle rewards, each trainer chooses
- * which Pokémon receives their XP. This sheet appears on its own whenever a
- * reward is waiting; the claim is a server-side RPC that stamps the reward
- * as used, so refreshing or tapping twice can never apply it twice.
+ * Battle XP (PokéGear 13). Each trainer gets an XP pool and shares it out
+ * over the Pokémon that actually fought, in amounts they choose. A Pokémon
+ * only ever takes what it needs for its next level (then it's back to 0 XP
+ * and you pick again), so nothing is lost; the pool stays open — also after
+ * a refresh — until every point is used.
  */
 export function XpRewardPrompt() {
-  const { data: pending } = usePendingXpRewards();
-  const { data: pokemon } = useTrainerPokemon();
-  const { data: config } = useGameConfig();
-  const claim = useClaimBattleXp();
+  const { data: pools } = useMyXpPools();
+  const allocate = useAllocateXp();
 
-  const [selected, setSelected] = React.useState<string | null>(null);
-  const [result, setResult] = React.useState<XpClaimResult | null>(null);
-  const [evo, setEvo] = React.useState<XpClaimResult | null>(null);
+  const [hiddenFor, setHiddenFor] = React.useState<string | null>(null);
+  const [chosenId, setChosenId] = React.useState<string | null>(null);
+  const [amount, setAmount] = React.useState("");
+  const [levelUp, setLevelUp] = React.useState<XpAllocationResult | null>(null);
+  const [evo, setEvo] = React.useState<XpAllocationResult | null>(null);
+  const [summary, setSummary] = React.useState<Summary | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const reward = pending?.[0] ?? null;
-  const maxLevel = config?.maxLevel ?? 8;
-
-  const choices = React.useMemo(() => {
-    const list = (pokemon ?? []).filter((p) => !p.is_dead);
-    return list.sort(
-      (a, b) =>
-        Number(a.party_slot === null) - Number(b.party_slot === null) ||
-        (a.party_slot ?? 99) - (b.party_slot ?? 99) ||
-        b.level - a.level
-    );
-  }, [pokemon]);
-  const anyBelowMax = choices.some((p) => p.level < maxLevel);
-  const isBlocked = (p: TrainerPokemon) => anyBelowMax && p.level >= maxLevel;
+  const pool = (pools ?? []).find((p) => p.recipient_id !== hiddenFor) ?? null;
+  const chosen = pool?.pokemon.find((p) => p.id === chosenId) ?? null;
 
   React.useEffect(() => {
-    setSelected(null);
-  }, [reward?.id]);
+    setChosenId(null);
+    setAmount("");
+    setError(null);
+  }, [pool?.recipient_id]);
 
   if (evo) {
     return (
@@ -53,23 +44,36 @@ export function XpRewardPrompt() {
         fromSpeciesId={evo.species_before}
         toSpeciesId={evo.species_after}
         fromName={evo.name}
-        toName={evo.species_after_name}
+        toName={evo.evolved_to ?? evo.name}
         onDone={() => setEvo(null)}
       />
     );
   }
 
-  const open = !!reward || !!result;
+  const open = !!pool || !!summary || !!levelUp;
+  const missing = chosen?.needed != null ? chosen.needed - chosen.xp : 0;
+  const maxGive = pool && chosen ? Math.min(pool.remaining, missing) : 0;
+  const n = Number(amount);
+  const valid = amount !== "" && Number.isInteger(n) && n >= 1 && n <= maxGive;
 
-  function handleConfirm() {
-    if (!reward || !selected) return;
-    claim.mutate(
-      { recipientId: reward.id, pokemonId: selected },
+  function give(value: number) {
+    if (!pool || !chosen) return;
+    setError(null);
+    allocate.mutate(
+      { recipientId: pool.recipient_id, pokemonId: chosen.id, amount: value },
       {
         onSuccess: (r) => {
-          setResult(r);
-          setSelected(null);
+          setAmount("");
+          setChosenId(null);
+          if (r.leveled_up) setLevelUp(r);
+          if (r.remaining <= 0) {
+            setSummary({
+              pool,
+              lines: [...pool.allocations, { pokemon_name: r.name, amount: r.used, level_before: r.level_before, level_after: r.level_after }],
+            });
+          }
         },
+        onError: (e) => setError(e instanceof Error ? e.message : "That didn't work."),
       }
     );
   }
@@ -80,90 +84,104 @@ export function XpRewardPrompt() {
         <motion.div className="absolute inset-0 z-[58] flex flex-col justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/70" />
           <motion.div
-            className="relative z-10 flex max-h-[85%] flex-col rounded-t-3xl border-t border-white/10 bg-screen-deep p-4 shadow-glass"
+            className="relative z-10 flex max-h-[88%] flex-col rounded-t-3xl border-t border-white/10 bg-screen-deep p-4 shadow-glass"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 360, damping: 34 }}
           >
-            {result ? (
-              <ClaimResult
-                result={result}
+            {levelUp ? (
+              <LevelUpCard
+                result={levelUp}
                 onContinue={() => {
-                  const r = result;
-                  setResult(null);
+                  const r = levelUp;
+                  setLevelUp(null);
                   if (r.species_after !== r.species_before) setEvo(r);
                 }}
               />
-            ) : reward ? (
+            ) : summary ? (
+              <SummaryCard summary={summary} onDone={() => setSummary(null)} />
+            ) : pool ? (
               <>
+                {/* Pool header: total / used / left */}
                 <div className="flex flex-col items-center text-center">
-                  <motion.div initial={{ scale: 0.5, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 260, damping: 12 }}>
-                    <Trophy className="h-9 w-9 text-volt drop-shadow-[0_0_14px_rgba(255,210,63,0.6)]" />
-                  </motion.div>
-                  <p className="mt-1 font-display text-lg font-bold text-mist">Battle Reward!</p>
-                  <div className="mt-1 flex gap-2">
-                    <span className="rounded-full bg-circuit-violet/20 px-3 py-1 font-mono text-sm font-semibold text-circuit-violet">
-                      +{reward.xp.toLocaleString()} XP
-                    </span>
-                    {reward.money > 0 ? (
-                      <span className="rounded-full bg-volt/15 px-3 py-1 font-mono text-sm font-semibold text-volt">+{formatMoney(reward.money)}</span>
-                    ) : null}
+                  <Trophy className="h-8 w-8 text-volt drop-shadow-[0_0_14px_rgba(255,210,63,0.6)]" />
+                  <p className="mt-1 font-display text-lg font-bold text-mist">Battle XP</p>
+                  <p className="text-xs text-mist/55">From {pool.encounter_name}</p>
+                  <div className="mt-2 grid w-full grid-cols-3 gap-1.5 text-center">
+                    <Stat label="Total" value={pool.total} />
+                    <Stat label="Given" value={pool.allocated} />
+                    <Stat label="Left" value={pool.remaining} highlight />
                   </div>
-                  {reward.encounter?.name ? (
-                    <p className="mt-1.5 text-xs text-mist/55">From {reward.encounter.name}</p>
-                  ) : null}
-                  <p className="mt-3 text-sm font-medium text-mist">Choose a Pokémon to receive {reward.xp.toLocaleString()} XP</p>
                 </div>
 
-                <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-1">
-                  {choices.length === 0 ? (
-                    <p className="py-6 text-center text-xs text-mist/50">You have no Pokémon that can gain XP.</p>
-                  ) : null}
-                  {choices.map((p) => {
-                    const blocked = isBlocked(p);
-                    return (
+                {!chosen ? (
+                  <PokemonPicker pool={pool} onPick={(id) => setChosenId(id)} />
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    <button type="button" onClick={() => setChosenId(null)} className="flex items-center gap-1 text-xs text-mist/60">
+                      <ChevronLeft className="h-3.5 w-3.5" /> Choose another Pokémon
+                    </button>
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
+                      <PokemonSprite speciesId={chosen.species_id} shiny={chosen.is_shiny} alt={chosen.name} className="h-14 w-14 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-mist">
+                          {chosen.name} <span className="font-mono text-[10px] text-mist/50">Lv{chosen.level}</span>
+                        </p>
+                        <XpBar xp={chosen.xp} level={chosen.level} className="mt-1" />
+                        <p className="mt-1 text-[11px] text-volt">Needs {missing} XP to reach Lv{chosen.level + 1}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        autoFocus
+                        inputMode="numeric"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && valid) give(n);
+                        }}
+                        placeholder={`1–${maxGive}`}
+                        aria-label="XP to give"
+                        className="w-24 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-center font-mono text-lg text-mist placeholder:text-mist/30 focus:outline-none focus:ring-1 focus:ring-volt"
+                      />
                       <button
-                        key={p.id}
                         type="button"
-                        disabled={blocked || claim.isPending}
-                        onClick={() => setSelected(p.id)}
-                        className={cn(
-                          "flex w-full touch-manipulation items-center gap-3 rounded-2xl p-2.5 text-left transition-colors",
-                          selected === p.id ? "bg-volt/15 ring-1 ring-volt/60" : "bg-white/5 active:bg-white/10",
-                          blocked && "opacity-45"
-                        )}
+                        disabled={!valid || allocate.isPending}
+                        onClick={() => give(n)}
+                        className="flex-1 touch-manipulation rounded-xl bg-volt py-2.5 text-sm font-bold text-screen-ink active:scale-[0.98] disabled:opacity-40"
                       >
-                        <SpriteImage src={pokemonSpriteUrl(p.species_id)} alt={p.species.name} className="h-10 w-10" fallbackClassName="h-10 w-10" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <p className="truncate text-sm font-medium text-mist">{p.nickname || p.species.name}</p>
-                            <span className="font-mono text-[10px] text-mist/50">Lv{p.level}</span>
-                            {p.party_slot === null ? <span className="text-[9px] uppercase text-mist/35">PC</span> : null}
-                          </div>
-                          <XpBar xp={p.xp} level={p.level} className="mt-1" />
-                        </div>
-                        {blocked ? (
-                          <span className="shrink-0 text-[10px] text-mist/50">Max level</span>
-                        ) : selected === p.id ? (
-                          <Check className="h-4 w-4 shrink-0 text-volt" />
-                        ) : null}
+                        {allocate.isPending ? "Giving…" : valid ? `Give ${n} XP` : "Type an amount"}
                       </button>
-                    );
-                  })}
-                </div>
+                    </div>
+                    {amount !== "" && Number(amount) > maxGive ? (
+                      <p className="text-[11px] text-amber-300">
+                        At most {maxGive} XP here — {maxGive === missing ? `that's exactly what ${chosen.name} needs for the next level` : "that's all you have left"}.
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-1.5">
+                      {missing <= pool.remaining ? (
+                        <QuickButton disabled={allocate.isPending} onClick={() => give(missing)}>
+                          Level up (+{missing})
+                        </QuickButton>
+                      ) : (
+                        <QuickButton disabled={allocate.isPending} onClick={() => give(pool.remaining)}>
+                          Give all {pool.remaining}
+                        </QuickButton>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {error ? <p className="mt-2 rounded-lg bg-rotom-red/15 px-3 py-2 text-xs text-rotom-red-light">{error}</p> : null}
 
                 <button
                   type="button"
-                  disabled={!selected || claim.isPending}
-                  onClick={handleConfirm}
-                  className="mt-3 touch-manipulation rounded-2xl bg-volt py-3 text-sm font-bold text-screen-ink active:scale-[0.98] disabled:opacity-40"
+                  onClick={() => setHiddenFor(pool.recipient_id)}
+                  className="mt-3 text-center text-[11px] text-mist/40"
                 >
-                  {claim.isPending ? "Giving XP…" : selected ? `Give XP to ${choices.find((c) => c.id === selected)?.nickname || choices.find((c) => c.id === selected)?.species.name}` : "Choose a Pokémon"}
+                  Later — the {pool.remaining} XP stays saved for you
                 </button>
-                {pending && pending.length > 1 ? (
-                  <p className="mt-2 text-center text-[11px] text-mist/40">{pending.length - 1} more reward{pending.length > 2 ? "s" : ""} waiting</p>
-                ) : null}
               </>
             ) : null}
           </motion.div>
@@ -173,48 +191,127 @@ export function XpRewardPrompt() {
   );
 }
 
-function ClaimResult({ result, onContinue }: { result: XpClaimResult; onContinue: () => void }) {
-  const leveled = result.level_after > result.level_before;
+function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className={cn("rounded-xl px-2 py-1.5", highlight ? "bg-circuit-violet/25" : "bg-white/5")}>
+      <p className="text-[9px] uppercase tracking-wide text-mist/50">{label}</p>
+      <p className={cn("font-mono text-base font-bold", highlight ? "text-circuit-violet" : "text-mist")}>{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+function QuickButton({ children, disabled, onClick }: { children: React.ReactNode; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="touch-manipulation rounded-full bg-circuit-violet/25 px-3 py-1.5 text-xs font-semibold text-circuit-violet active:scale-95 disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Only the Pokémon that fought in this battle; the closest to a level-up first. */
+function PokemonPicker({ pool, onPick }: { pool: XpPool; onPick: (id: string) => void }) {
+  const usable = (p: XpPoolPokemon) => !p.is_dead && p.needed !== null;
+  const list = [...pool.pokemon].sort(
+    (a, b) => Number(usable(b)) - Number(usable(a)) || (a.needed ?? 0) - a.xp - ((b.needed ?? 0) - b.xp)
+  );
+  const anyUsable = list.some(usable);
+  return (
+    <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-1">
+      <p className="text-xs font-medium text-mist">Who gets XP? (only Pokémon that fought)</p>
+      {!anyUsable ? (
+        <p className="rounded-xl bg-amber-400/10 px-3 py-2.5 text-xs text-amber-200">
+          None of the Pokémon that fought can gain XP right now (max level, or gone). Your XP stays saved — ask the Game Master if this reward should be
+          closed.
+        </p>
+      ) : null}
+      {list.map((p) => {
+        const ok = usable(p);
+        const missing = p.needed !== null ? p.needed - p.xp : 0;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            disabled={!ok}
+            onClick={() => onPick(p.id)}
+            className={cn(
+              "flex w-full touch-manipulation items-center gap-3 rounded-2xl bg-white/5 p-2.5 text-left active:bg-white/10",
+              !ok && "opacity-45"
+            )}
+          >
+            <PokemonSprite speciesId={p.species_id} view="icon" shiny={p.is_shiny} alt={p.name} className="h-10 w-10 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-medium text-mist">{p.name}</p>
+                <span className="font-mono text-[10px] text-mist/50">Lv{p.level}</span>
+              </div>
+              <XpBar xp={p.xp} level={p.level} className="mt-1" />
+            </div>
+            <span className="w-16 shrink-0 text-right text-[10px] text-mist/60">
+              {p.is_dead ? "Dead" : p.needed === null ? "Max level" : `needs ${missing}`}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function LevelUpCard({ result, onContinue }: { result: XpAllocationResult; onContinue: () => void }) {
   const evolved = result.species_after !== result.species_before;
   return (
     <div className="flex flex-col items-center py-2 text-center">
-      <motion.div
-        className="relative"
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 220, damping: 14 }}
-      >
-        <SpriteImage src={pokemonSpriteUrl(result.species_before)} alt={result.name} className="h-24 w-24" fallbackClassName="h-24 w-24" />
-        {leveled ? (
-          <motion.div
-            className="absolute -right-2 -top-1 text-volt"
-            animate={{ scale: [1, 1.3, 1], rotate: [0, 15, 0] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          >
-            <Sparkles className="h-6 w-6" />
-          </motion.div>
-        ) : null}
+      <motion.div className="relative" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 220, damping: 14 }}>
+        <PokemonSprite speciesId={result.species_before} alt={result.name} className="h-24 w-24" />
+        <motion.div className="absolute -right-2 -top-1 text-volt" animate={{ scale: [1, 1.3, 1], rotate: [0, 15, 0] }} transition={{ duration: 1, repeat: Infinity }}>
+          <Sparkles className="h-6 w-6" />
+        </motion.div>
       </motion.div>
-      <p className="mt-1 font-display text-lg font-bold text-mist">
-        {result.name} gained {result.xp.toLocaleString()} XP!
-      </p>
-      {leveled ? (
-        <motion.p
-          className="mt-1 rounded-full bg-volt/15 px-3 py-1 text-sm font-semibold text-volt"
-          initial={{ y: 6, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          Grew to Lv. {result.level_after}!
-        </motion.p>
-      ) : null}
-      {evolved ? <p className="mt-2 text-xs text-mist/60">Something is happening…</p> : null}
-      <button
-        type="button"
-        onClick={onContinue}
-        className="mt-4 w-full touch-manipulation rounded-2xl bg-white/10 py-3 text-sm font-semibold text-mist active:scale-[0.98]"
-      >
+      <p className="mt-1 font-display text-lg font-bold text-mist">{result.name} grew to Lv. {result.level_after}!</p>
+      <p className="mt-1 text-xs text-mist/60">XP starts again at 0 for the next level.</p>
+      {evolved ? <p className="mt-2 text-xs text-volt">Something is happening…</p> : null}
+      <button type="button" onClick={onContinue} className="mt-4 w-full touch-manipulation rounded-2xl bg-white/10 py-3 text-sm font-semibold text-mist active:scale-[0.98]">
         {evolved ? "Watch!" : "Continue"}
+      </button>
+    </div>
+  );
+}
+
+function SummaryCard({ summary, onDone }: { summary: Summary; onDone: () => void }) {
+  const used = summary.lines.reduce((s, l) => s + l.amount, 0);
+  return (
+    <div className="flex min-h-0 flex-col">
+      <p className="text-center font-display text-lg font-bold text-mist">Encounter complete</p>
+      <p className="text-center text-xs text-mist/55">{summary.pool.encounter_name}</p>
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-xl bg-white/5">
+        <table className="w-full text-xs">
+          <thead className="text-[10px] uppercase tracking-wide text-mist/45">
+            <tr>
+              <th className="px-3 py-1.5 text-left font-medium">Pokémon</th>
+              <th className="px-3 py-1.5 text-right font-medium">XP</th>
+              <th className="px-3 py-1.5 text-left font-medium">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.lines.map((l, i) => (
+              <tr key={i} className="border-t border-white/5 text-mist">
+                <td className="px-3 py-1.5">{l.pokemon_name}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{l.amount}</td>
+                <td className="px-3 py-1.5 text-mist/70">{l.level_after > l.level_before ? `Lv ${l.level_before} → ${l.level_after}` : "No level up"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-center font-mono text-sm text-mist">
+        {used} / {summary.pool.total} XP used · <span className="text-emerald-300">0 left</span>
+      </p>
+      <button type="button" onClick={onDone} className="mt-3 touch-manipulation rounded-2xl bg-volt py-3 text-sm font-bold text-screen-ink active:scale-[0.98]">
+        Done
       </button>
     </div>
   );

@@ -17,7 +17,9 @@ import {
   sleep,
   type Floater,
 } from "@/components/battle/BattleBits";
+import { toast } from "@/lib/toast";
 import type {
+  BattleBall,
   BattleBagItem,
   BattleEnemyState,
   BattleEvent,
@@ -65,6 +67,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const [ov, setOv] = React.useState<Overrides>(NO_OVERRIDES);
   const [floaters, setFloaters] = React.useState<Floater[]>([]);
   const [pendingItem, setPendingItem] = React.useState<BattleBagItem | null>(null);
+  const [pendingBall, setPendingBall] = React.useState<BattleBall | null>(null);
   const [introDone, setIntroDone] = React.useState(false);
   const submitRoll = useSubmitInitiative();
 
@@ -110,10 +113,45 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const usable = party.filter((p) => !p.is_dead && p.status !== "fainted" && p.current_hp > 0);
   const status = state?.encounter.status;
   const over = status !== "active";
-  const aliveEnemies = enemies.filter((e) => !e.fainted);
-  const target = enemies.find((e) => e.id === targetId && !e.fainted) ?? aliveEnemies[0] ?? enemies[0] ?? null;
+  // PokéGear 13: only Pokémon on the field (wild ones, and each enemy
+  // trainer's active Pokémon) can be attacked; caught ones have left.
+  const aliveEnemies = enemies.filter((e) => !e.fainted && e.on_field);
+  // (on_field comes from the server state, which only refreshes after a
+  // playback, so a Pokémon that faints on screen stays for its animation.)
+  const arenaEnemies = enemies.filter((e) => !e.caught && e.on_field);
+  const shownEnemies = arenaEnemies.slice(0, 6);
+  const hiddenCount = arenaEnemies.length - shownEnemies.length;
+  const target = aliveEnemies.find((e) => e.id === targetId) ?? aliveEnemies[0] ?? null;
+  const trainerOf = (e: BattleEnemyState | null) => (e?.enemy_trainer_id ? state?.enemy_trainers.find((t) => t.id === e.enemy_trainer_id) ?? null : null);
+  const catchable = enemies.filter((e) => e.catchable);
+  const myCatches = state?.catches.filter((c) => c.profile_id === me?.profile_id) ?? [];
+  const waitingCatches = myCatches.filter((c) => c.status === "pending");
   const allies = (state?.players ?? []).filter((p) => p.profile_id !== me?.profile_id);
   const busy = playing || action.isPending;
+
+  // Catch results arrive live when the Game Master decides.
+  const catchStatus = React.useRef<Map<string, string> | null>(null);
+  React.useEffect(() => {
+    if (!state) return;
+    const mine = state.catches.filter((c) => c.profile_id === me?.profile_id);
+    const prev = catchStatus.current;
+    if (prev) {
+      for (const c of mine) {
+        if (prev.get(c.id) === "pending" && c.status !== "pending") {
+          if (c.status === "caught") {
+            setMessage({ text: `🎉 ${c.pokemon_name} was caught!`, sub: "Check your Team or PC." });
+            toast(`🎉 You caught ${c.pokemon_name}!`, "success");
+          } else if (c.status === "not_caught") {
+            setMessage({ text: `${c.pokemon_name} escaped!`, sub: `Your ${c.ball_name ?? "Poké Ball"} didn't hold it.` });
+          } else {
+            setMessage({ text: `${c.pokemon_name} was caught by someone else.` });
+          }
+          window.setTimeout(() => setMessage(null), 3500);
+        }
+      }
+    }
+    catchStatus.current = new Map(mine.map((c) => [c.id, c.status]));
+  }, [state, me?.profile_id]);
 
   // Turn order (initiative)
   const order: BattleTurnEntry[] = state?.order ?? [];
@@ -398,6 +436,11 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
       </div>
 
       <TurnStrip order={order} phase={phase} round={state.encounter.round} meId={me?.battle_player_id ?? null} />
+      {waitingCatches.length ? (
+        <p className="mx-3 mt-1.5 rounded-xl bg-sky-400/15 px-3 py-1.5 text-[11px] text-sky-200">
+          ⏳ Waiting for the Game Master: {waitingCatches.map((c) => c.pokemon_name).join(", ")}
+        </p>
+      ) : null}
 
       {/* Arena */}
       <div className="relative mx-3 mt-2 h-[36%] min-h-[190px] shrink-0 overflow-hidden rounded-3xl ring-1 ring-white/10">
@@ -406,14 +449,17 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
         <div className="absolute inset-x-0 top-[58%] h-px bg-white/15" />
 
         {/* Enemy side */}
-        <div className="absolute right-2 top-[16%] flex h-[42%] w-[60%] items-end justify-center">
+        <div className={cn("absolute right-2 top-[16%] flex h-[42%] items-end justify-center", shownEnemies.length > 3 ? "w-[50%]" : "w-[60%]")}>
           <div className="absolute bottom-0 h-[22%] w-[92%] rounded-[50%] bg-[radial-gradient(closest-side,rgba(0,0,0,0.35),rgba(0,0,0,0.05))]" />
-          <div className="relative flex h-full w-full items-end justify-center">
-            {enemies.map((e) => (
+          <div className="relative flex h-full w-full flex-wrap content-end items-end justify-center">
+            {hiddenCount > 0 ? (
+              <span className="absolute -top-5 right-0 z-10 rounded-full bg-screen-ink/80 px-2 py-0.5 text-[10px] text-mist/80">+{hiddenCount} more</span>
+            ) : null}
+            {shownEnemies.map((e) => (
               <EnemySlot
                 key={e.id}
                 enemy={e}
-                count={enemies.length}
+                count={shownEnemies.length}
                 selected={e.id === target?.id && aliveEnemies.length > 1}
                 onSelect={() => !e.fainted && setTargetId(e.id)}
                 register={registerEnemy}
@@ -426,6 +472,11 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
         {/* Enemy info box */}
         {target ? (
           <div className="absolute left-2 top-2 w-[46%] rounded-xl bg-screen-ink/80 p-2 shadow-glass ring-1 ring-white/10 backdrop-blur">
+            {trainerOf(target) ? (
+              <p className="truncate text-[9px] uppercase tracking-wide text-rotom-red-light">
+                {trainerOf(target)!.name} · {trainerOf(target)!.remaining}/{trainerOf(target)!.total} left
+              </p>
+            ) : null}
             <div className="flex items-baseline justify-between gap-1">
               <p className="truncate font-display text-[13px] font-semibold text-mist">{target.name}</p>
               <span className="shrink-0 font-mono text-[10px] text-mist/60">Lv{target.level}</span>
@@ -435,14 +486,17 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               <TypePill type={target.type2} />
             </div>
             <BattleHpBar current={target.current_hp} max={target.max_hp} className="mt-1.5" />
-            {enemies.length > 1 ? (
+            {enemies.length > 12 ? (
+              <p className="mt-1 text-[10px] text-mist/55">{enemies.filter((e) => !e.fainted && !e.caught).length} of {enemies.length} enemies left</p>
+            ) : null}
+            {enemies.length > 1 && enemies.length <= 12 ? (
               <div className="mt-1.5 flex gap-1">
                 {enemies.map((e) => (
                   <span
                     key={e.id}
                     className={cn(
                       "h-1.5 flex-1 rounded-full",
-                      e.fainted ? "bg-white/15" : e.id === target.id ? "bg-volt" : "bg-emerald-400/70"
+                      e.fainted || e.caught ? "bg-white/15" : e.id === target.id ? "bg-volt" : "bg-emerald-400/70"
                     )}
                   />
                 ))}
@@ -590,6 +644,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
             <SheetPanel title={`${active.name} attacks`} onBack={() => setPanel("main")} key="fight">
               <AttackPanel
                 enemies={aliveEnemies}
+                trainerName={(e) => trainerOf(e)?.name ?? null}
                 targetId={target?.id ?? null}
                 onTarget={setTargetId}
                 busy={busy}
@@ -600,12 +655,27 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
 
           {!over && panel === "bag" ? (
             <SheetPanel
-              title={pendingItem ? `Use ${pendingItem.name} on…` : "Bag"}
-              onBack={() => (pendingItem ? setPendingItem(null) : setPanel("main"))}
+              title={pendingItem ? `Use ${pendingItem.name} on…` : pendingBall ? `Throw a ${pendingBall.name} at…` : "Bag"}
+              onBack={() => (pendingItem ? setPendingItem(null) : pendingBall ? setPendingBall(null) : setPanel("main"))}
               key="bag"
             >
-              {!pendingItem ? (
-                (me?.items ?? []).length === 0 ? (
+              {pendingBall ? (
+                <CatchTargetList
+                  enemies={catchable}
+                  waitingIds={new Set(waitingCatches.map((c) => c.enemy_id))}
+                  busy={busy}
+                  onPick={(e) => {
+                    const ball = pendingBall;
+                    setPendingBall(null);
+                    run({ kind: "catch", encounterId, enemyId: e.id, ballItemId: ball.item_id });
+                  }}
+                />
+              ) : !pendingItem ? (
+                <>
+                {state.encounter.catching_allowed ? (
+                  <BallList balls={me?.balls ?? []} canCatch={catchable.length > 0} busy={busy} onPick={setPendingBall} />
+                ) : null}
+                {(me?.items ?? []).length === 0 ? (
                   <p className="py-6 text-center text-xs text-mist/50">No battle items in your Bag.</p>
                 ) : (
                   <div className="space-y-1.5">
@@ -628,7 +698,8 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                       </button>
                     ))}
                   </div>
-                )
+                )}
+                </>
               ) : (
                 <PartyList
                   party={party}
@@ -722,7 +793,7 @@ function EnemySlot({
     return () => register(enemy.id, null);
   }, [enemy.id, ctl, register]);
 
-  const size = count === 1 ? "h-full w-[70%]" : count === 2 ? "h-[85%] w-1/2" : "h-[62%] w-1/3";
+  const size = count === 1 ? "h-full w-[70%]" : count === 2 ? "h-[85%] w-1/2" : count === 3 ? "h-[62%] w-1/3" : "h-1/2 w-1/3";
 
   return (
     <button
@@ -979,7 +1050,7 @@ function TurnStrip({
                 ? "bg-volt font-semibold text-screen-ink"
                 : !o.can_act && phase === "fighting"
                   ? "bg-white/5 text-mist/35 line-through"
-                  : o.kind === "enemy"
+                  : o.kind === "enemy" || o.kind === "trainer"
                     ? "bg-rotom-red/20 text-rotom-red-light"
                     : o.battle_player_id === meId
                       ? "bg-sky-400/20 text-sky-200"
@@ -1062,12 +1133,14 @@ function InitiativePanel({
  */
 function AttackPanel({
   enemies,
+  trainerName,
   targetId,
   onTarget,
   busy,
   onAttack,
 }: {
   enemies: BattleEnemyState[];
+  trainerName: (e: BattleEnemyState) => string | null;
   targetId: string | null;
   onTarget: (id: string) => void;
   busy: boolean;
@@ -1095,6 +1168,7 @@ function AttackPanel({
                 e.id === target.id ? "bg-volt text-screen-ink" : "bg-white/10 text-mist active:bg-white/15"
               )}
             >
+              {trainerName(e) ? <span className="font-normal opacity-70">{trainerName(e)}&apos;s </span> : null}
               {e.name} <span className="font-mono font-normal opacity-70">{e.current_hp}/{e.max_hp}</span>
             </button>
           ))}
@@ -1156,6 +1230,77 @@ function AttackPanel({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Catching (PokéGear 13)
+// ---------------------------------------------------------------------------
+function BallList({ balls, canCatch, busy, onPick }: { balls: BattleBall[]; canCatch: boolean; busy: boolean; onPick: (b: BattleBall) => void }) {
+  return (
+    <div className="mb-3">
+      <p className="mb-1.5 text-[11px] text-mist/50">Poké Balls — try to catch a wild Pokémon (uses your turn; the Game Master decides)</p>
+      {balls.length === 0 ? (
+        <p className="rounded-xl bg-white/5 px-3 py-2 text-xs text-mist/50">You have no Poké Balls.</p>
+      ) : !canCatch ? (
+        <p className="rounded-xl bg-white/5 px-3 py-2 text-xs text-mist/50">There&apos;s no wild Pokémon left to catch.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          {balls.map((b) => (
+            <button
+              key={b.item_id}
+              type="button"
+              disabled={busy}
+              onClick={() => onPick(b)}
+              className="flex touch-manipulation items-center gap-2 rounded-xl bg-white/5 p-2 text-left active:bg-white/10 disabled:opacity-50"
+            >
+              <ItemIcon item={b} className="h-7 w-7 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-mist">{b.name}</span>
+              <span className="font-mono text-[11px] text-mist/60">×{b.quantity}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CatchTargetList({
+  enemies,
+  waitingIds,
+  busy,
+  onPick,
+}: {
+  enemies: BattleEnemyState[];
+  waitingIds: Set<string>;
+  busy: boolean;
+  onPick: (e: BattleEnemyState) => void;
+}) {
+  if (enemies.length === 0) return <p className="py-6 text-center text-xs text-mist/50">No wild Pokémon left to catch.</p>;
+  return (
+    <div className="space-y-1.5">
+      {enemies.map((e) => {
+        const waiting = waitingIds.has(e.id);
+        return (
+          <button
+            key={e.id}
+            type="button"
+            disabled={busy || waiting}
+            onClick={() => onPick(e)}
+            className="flex w-full touch-manipulation items-center gap-2.5 rounded-xl bg-white/5 p-2 text-left active:bg-white/10 disabled:opacity-50"
+          >
+            <BattleSprite speciesId={e.species_id} spriteUrl={e.sprite_url} alt={e.name} className={cn("h-10 w-10", e.fainted && "grayscale")} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-mist">
+                {e.name} <span className="font-mono text-[10px] text-mist/50">Lv{e.level}</span>
+              </p>
+              <BattleHpBar current={e.current_hp} max={e.max_hp} className="mt-1" />
+            </div>
+            <span className="w-16 shrink-0 text-right text-[10px] text-mist/60">{waiting ? "Waiting…" : e.fainted ? "Fainted" : `${e.current_hp}/${e.max_hp}`}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

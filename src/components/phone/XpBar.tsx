@@ -4,9 +4,9 @@ import { useGameConfig } from "@/hooks/useBattle";
 import { xpProgress } from "@/lib/xp";
 
 /**
- * XP bar showing "Current XP / Next level XP" in TOTAL XP, e.g. Lv 3 at
- * 32 XP → "32 / 45 XP". Reads the XP table from game_config, the same table
- * the server levels Pokémon up with. At the max level it shows "MAX".
+ * XP bar for the current level (PokéGear 13: every level starts at 0), e.g.
+ * Lv 4 with 35 of 70 XP → "35 / 70 XP". Reads the XP table from game_config,
+ * the same table the server levels Pokémon up with. At the max level: "MAX".
  */
 export function XpBar({ xp, level, className }: { xp: number; level: number; className?: string }) {
   const { data: config } = useGameConfig();
@@ -28,7 +28,7 @@ export function XpBar({ xp, level, className }: { xp: number; level: number; cla
         />
       </div>
       <span className="shrink-0 font-mono text-[10px] tabular-nums text-mist/60">
-        {p.atMax ? "MAX" : `${p.total} / ${p.nextTotal} XP`}
+        {p.atMax ? "MAX" : `${p.current} / ${p.needed} XP`}
       </span>
     </div>
   );

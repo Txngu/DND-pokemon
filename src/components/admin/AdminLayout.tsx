@@ -4,11 +4,12 @@ import { useProfile } from "@/hooks/useProfile";
 import { ToastViewport } from "@/components/phone/ToastViewport";
 import { APP_VERSION } from "@/lib/version";
 import { useBattlesAwaitingReward } from "@/hooks/useEncounter";
+import { usePendingCatchCount } from "@/hooks/useEncounterManager";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/users", label: "Users", icon: Users },
-  { to: "/admin/battles", label: "Battle Manager", icon: Swords },
+  { to: "/admin/battles", label: "Encounters", icon: Swords },
   { to: "/admin/rewards", label: "Rewards", icon: Gift },
   { to: "/admin/items", label: "Items", icon: Package },
   { to: "/admin/activity", label: "Activity Log", icon: ScrollText },
@@ -22,7 +23,10 @@ const NAV = [
  */
 export function AdminLayout() {
   const { data: profile, isLoading } = useProfile();
-  const awaiting = useBattlesAwaitingReward();
+  const awaitingRewards = useBattlesAwaitingReward();
+  const pendingCatches = usePendingCatchCount();
+  // Badge on "Encounters": battles waiting for rewards + catch attempts waiting for a decision.
+  const awaiting = { length: awaitingRewards.length + pendingCatches };
 
   if (isLoading || !profile) {
     return (
