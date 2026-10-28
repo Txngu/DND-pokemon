@@ -116,6 +116,7 @@ export function useBattleState(encounterId: string | null) {
       { table: "battle_encounters", filter: `id=eq.${encounterId}` },
       { table: "battle_enemies", filter: `encounter_id=eq.${encounterId}` },
       { table: "battle_players", filter: `encounter_id=eq.${encounterId}` },
+      { table: "battle_turn_order", filter: `encounter_id=eq.${encounterId}` },
     ],
     [["battle_state", encounterId]]
   );
@@ -138,7 +139,7 @@ function useInvalidateAfterBattleAction() {
 }
 
 export type BattleAction =
-  | { kind: "attack"; encounterId: string; moveId: number; targetEnemyId: string | null }
+  | { kind: "attack"; encounterId: string; targetEnemyId: string; damage: number }
   | { kind: "item"; encounterId: string; itemId: string; pokemonId: string }
   | { kind: "switch"; encounterId: string; pokemonId: string };
 
@@ -153,10 +154,10 @@ export function useBattleAction() {
     mutationFn: async (action: BattleAction): Promise<BattleActionResult> => {
       const res =
         action.kind === "attack"
-          ? await supabase.rpc("battle_attack", {
+          ? await supabase.rpc("battle_turn_attack", {
               p_encounter_id: action.encounterId,
-              p_move_id: action.moveId,
               p_target_enemy_id: action.targetEnemyId,
+              p_damage: action.damage,
             })
           : action.kind === "item"
             ? await supabase.rpc("battle_use_item", {
@@ -172,6 +173,19 @@ export function useBattleAction() {
       return res.data as BattleActionResult;
     },
     onSettled: (_data, _error, action) => invalidate(action.encounterId),
+  });
+}
+
+/** A trainer submits their d20 initiative roll (also used for tie re-rolls). */
+export function useSubmitInitiative() {
+  const invalidate = useInvalidateAfterBattleAction();
+  return useMutation({
+    meta: { silent: true },
+    mutationFn: async ({ encounterId, roll }: { encounterId: string; roll: number }) => {
+      const { error } = await supabase.rpc("battle_submit_initiative", { p_encounter_id: encounterId, p_roll: roll });
+      if (error) throw error;
+    },
+    onSettled: (_d, _e, v) => invalidate(v.encounterId),
   });
 }
 
@@ -324,14 +338,6 @@ export interface EnemyDraftPayload {
   level: number;
   max_hp: number;
   current_hp: number;
-  attack: number;
-  defense: number;
-  sp_attack: number;
-  sp_defense: number;
-  speed: number;
-  type1: string;
-  type2: string | null;
-  move_ids: number[];
 }
 
 export function useAdminCreateBattle() {
@@ -341,16 +347,15 @@ export function useAdminCreateBattle() {
       description: string;
       playerIds: string[];
       enemies: EnemyDraftPayload[];
-      enemyAutoAttack: boolean;
-      enemyDamageScale: number;
     }) => {
       const { data, error } = await supabase.rpc("admin_create_battle", {
         p_name: input.name,
         p_description: input.description || null,
         p_player_ids: input.playerIds,
         p_enemies: input.enemies,
-        p_enemy_auto_attack: input.enemyAutoAttack,
-        p_enemy_damage_scale: input.enemyDamageScale,
+        // Types come from the species; no automatic enemy attacks (PokéGear 12.1 turns).
+        p_enemy_auto_attack: false,
+        p_enemy_damage_scale: 1,
       });
       if (error) throw error;
       return data as string;
@@ -374,18 +379,34 @@ export function useAdminAdjustEnemyHp() {
   });
 }
 
-export function useAdminEnemyAttack() {
+/** The enemy whose turn it is attacks: the GM picks the target and types the damage (0 = missed). */
+export function useAdminEnemyTurnAttack() {
   return useAdminBattleMutation(
-    async ({ encounterId, enemyId, targetPokemonId }: { encounterId: string; enemyId: string; targetPokemonId: string | null }) => {
-      const { data, error } = await supabase.rpc("admin_enemy_attack", {
+    async ({ encounterId, targetPokemonId, damage }: { encounterId: string; targetPokemonId: string; damage: number }) => {
+      const { data, error } = await supabase.rpc("admin_enemy_turn_attack", {
         p_encounter_id: encounterId,
-        p_enemy_id: enemyId,
         p_target_pokemon_id: targetPokemonId,
+        p_damage: damage,
       });
       if (error) throw error;
       return data as BattleActionResult;
     }
   );
+}
+
+export function useAdminSkipTurn() {
+  return useAdminBattleMutation(async ({ encounterId }: { encounterId: string }) => {
+    const { error } = await supabase.rpc("admin_skip_turn", { p_encounter_id: encounterId });
+    if (error) throw error;
+  });
+}
+
+/** GM: enter an enemy's d20 roll, or enter/correct a trainer's roll during initiative. */
+export function useAdminSetInitiative() {
+  return useAdminBattleMutation(async ({ entryId, roll }: { entryId: string; roll: number }) => {
+    const { error } = await supabase.rpc("admin_set_initiative", { p_entry_id: entryId, p_roll: roll });
+    if (error) throw error;
+  });
 }
 
 export function useAdminSetBattleStatus() {

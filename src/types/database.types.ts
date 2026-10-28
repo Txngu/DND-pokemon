@@ -702,6 +702,9 @@ export interface Database {
           enemy_damage_scale: number;
           completed_at: string | null;
           rewarded_at: string | null;
+          phase: "initiative" | "fighting";
+          round: number;
+          turn_position: number | null;
         };
         Insert: {
           id?: string;
@@ -722,6 +725,9 @@ export interface Database {
           enemy_damage_scale?: number;
           completed_at?: string | null;
           rewarded_at?: string | null;
+          phase?: "initiative" | "fighting";
+          round?: number;
+          turn_position?: number | null;
         };
         Update: {
           id?: string;
@@ -742,6 +748,9 @@ export interface Database {
           enemy_damage_scale?: number;
           completed_at?: string | null;
           rewarded_at?: string | null;
+          phase?: "initiative" | "fighting";
+          round?: number;
+          turn_position?: number | null;
         };
         Relationships: [];
       };
@@ -1215,6 +1224,11 @@ export interface Database {
         };
         Returns: unknown;
       };
+      battle_turn_attack: { Args: { p_encounter_id: string; p_target_enemy_id: string; p_damage: number }; Returns: unknown };
+      battle_submit_initiative: { Args: { p_encounter_id: string; p_roll: number }; Returns: void };
+      admin_set_initiative: { Args: { p_entry_id: string; p_roll: number }; Returns: void };
+      admin_enemy_turn_attack: { Args: { p_encounter_id: string; p_target_pokemon_id: string; p_damage: number }; Returns: unknown };
+      admin_skip_turn: { Args: { p_encounter_id: string }; Returns: void };
       suggest_moves: {
         Args: { p_type1: string; p_type2: string | null; p_level: number };
         Returns: Database["public"]["Tables"]["moves"]["Row"][];
@@ -1369,8 +1383,24 @@ export interface BattlePlayerState {
 export interface BattlePartyPokemon extends BattleActivePokemon {
   is_dead: boolean;
   party_slot: number;
-  speed: number;
-  moves: BattleMove[];
+}
+
+/** One place in the initiative / turn order (PokéGear 12.1). */
+export interface BattleTurnEntry {
+  id: string;
+  kind: "player" | "enemy";
+  battle_player_id: string | null;
+  profile_id: string | null;
+  enemy_id: string | null;
+  name: string;
+  /** First d20 roll, then any tie re-rolls. */
+  rolls: number[];
+  roll: number | null;
+  /** Waiting for (another) roll. */
+  awaiting: boolean;
+  position: number | null;
+  can_act: boolean;
+  is_current: boolean;
 }
 
 export interface BattleBagItem {
@@ -1435,6 +1465,7 @@ export interface BattleState {
   players: BattlePlayerState[];
   logs: BattleLogEntry[];
   reward: BattleRewardState | null;
+  order: BattleTurnEntry[];
   me?: {
     battle_player_id: string;
     profile_id: string;
