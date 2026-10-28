@@ -8,6 +8,7 @@ const STATUS_STYLES: Record<PokemonStatus, { label: string; classes: string }> =
   paralyzed: { label: "Paralyzed", classes: "bg-yellow-400/15 text-yellow-300" },
   asleep: { label: "Asleep", classes: "bg-indigo-400/15 text-indigo-300" },
   frozen: { label: "Frozen", classes: "bg-cyan-400/15 text-cyan-300" },
+  confused: { label: "Confused", classes: "bg-pink-400/15 text-pink-300" },
   fainted: { label: "Fainted", classes: "bg-mist/10 text-mist/50" },
 };
 

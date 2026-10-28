@@ -1,4 +1,5 @@
 export const ACTIVITY_LABELS: Record<string, string> = {
+  pokemon_self_created: "Trainer created a Pokémon",
   user_created: "Created a user",
   user_deleted: "Deleted a user",
   password_reset: "Reset a password",

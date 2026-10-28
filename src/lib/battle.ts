@@ -109,6 +109,7 @@ const STATUS_NAMES: Partial<Record<PokemonStatus, string>> = {
   paralyzed: "paralysis",
   asleep: "sleep",
   frozen: "freeze",
+  confused: "confusion",
 };
 
 export function describeItemEffect(effect: ItemBattleEffect): string {

@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { LayoutDashboard, Users, Gift, Package, ScrollText, Smartphone, Swords } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
 import { ToastViewport } from "@/components/phone/ToastViewport";
+import { APP_VERSION } from "@/lib/version";
 import { useBattlesAwaitingReward } from "@/hooks/useEncounter";
 
 const NAV = [
@@ -40,7 +41,7 @@ export function AdminLayout() {
           </div>
           <div>
             <p className="text-sm font-semibold">PokéGear</p>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">Admin</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Admin · {APP_VERSION}</p>
           </div>
         </div>
 

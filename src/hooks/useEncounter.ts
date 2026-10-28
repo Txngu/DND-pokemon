@@ -26,7 +26,7 @@ import type {
 // ---------------------------------------------------------------------------
 type RealtimeSpec = { table: string; filter?: string };
 
-function useRealtimeInvalidate(channelName: string | null, specs: RealtimeSpec[], keys: unknown[][]) {
+export function useRealtimeInvalidate(channelName: string | null, specs: RealtimeSpec[], keys: unknown[][]) {
   const queryClient = useQueryClient();
   const specsKey = JSON.stringify(specs);
   const keysKey = JSON.stringify(keys);

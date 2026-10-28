@@ -105,7 +105,7 @@ export function PurchaseSheet({ listing, money, pending, errorMessage, onClose, 
           </div>
 
           {!canAfford ? (
-            <p className="mt-2 text-center text-xs text-rotom-red-light">Not enough money for this purchase.</p>
+            <p className="mt-2 text-center text-xs text-rotom-red-light">You do not have enough money to purchase this item.</p>
           ) : errorMessage ? (
             <p className="mt-2 text-center text-xs text-rotom-red-light">{errorMessage}</p>
           ) : null}

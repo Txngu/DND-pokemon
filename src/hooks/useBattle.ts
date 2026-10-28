@@ -29,7 +29,9 @@ export function useGameConfig() {
       // the Pokémon Center. The server enforces this either way.
       const playerSelfEdit = String(data.find((r) => r.key === "player_self_edit")?.value ?? "false") === "true";
       const damageScale = Number(data.find((r) => r.key === "battle_damage_scale")?.value ?? 5) || 5;
-      return { maxLevel, xpCurve, playerSelfEdit, damageScale };
+      // PokéGear 12: may trainers create Pokémon for themselves? (GM switch)
+      const playerCreatePokemon = String(data.find((r) => r.key === "player_create_pokemon")?.value ?? "false") === "true";
+      return { maxLevel, xpCurve, playerSelfEdit, damageScale, playerCreatePokemon };
     },
     staleTime: 5 * 60_000,
   });

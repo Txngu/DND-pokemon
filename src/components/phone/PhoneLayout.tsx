@@ -10,6 +10,7 @@ import { resolveWallpaper } from "@/lib/cityThemes";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BattleWatcher } from "@/components/battle/BattleWatcher";
 import { XpRewardPrompt } from "@/components/battle/XpRewardPrompt";
+import { useMyPokemonRealtime } from "@/hooks/usePokemonHp";
 
 /**
  * Shell for every authenticated screen. The lock state lives in
@@ -53,10 +54,17 @@ export function PhoneLayout() {
             {/* PokéGear 10.0: auto-open admin battles, and ask where battle XP goes */}
             <BattleWatcher />
             <XpRewardPrompt />
+            {/* PokéGear 12: KP/Team changes made elsewhere (GM, battles) show up live */}
+            <PokemonLiveSync />
           </>
         )}
         <ToastViewport />
       </PhoneFrame>
     </RegionalThemeProvider>
   );
+}
+
+function PokemonLiveSync() {
+  useMyPokemonRealtime();
+  return null;
 }

@@ -7,6 +7,7 @@ import { ItemIcon } from "@/components/phone/ItemIcon";
 import { HpBar } from "@/components/phone/HpBar";
 import { XpBar } from "@/components/phone/XpBar";
 import { KpEditor } from "@/components/phone/KpEditor";
+import { DamageControl } from "@/components/phone/DamageControl";
 import { StatusBadge } from "@/components/phone/StatusBadge";
 import { HeldItemSheet } from "@/components/phone/HeldItemSheet";
 import { EvolutionAnimation } from "@/components/phone/EvolutionAnimation";
@@ -176,9 +177,13 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
               <p className="text-center text-[11px] text-mist/40">This Pokémon has died and can&apos;t be changed.</p>
             ) : fainted ? (
               <p className="text-center text-[11px] text-rotom-red-light">Fainted — visit the Pokémon Center to revive.</p>
-            ) : canSelfEdit ? (
-              <KpEditor onAdjust={handleKpAdjust} disabled={adjustKp.isPending} />
-            ) : null}
+            ) : (
+              <>
+                {/* PokéGear 12: trainers can always record damage on their own Pokémon */}
+                <DamageControl pokemon={pokemon} name={displayName} />
+                {canSelfEdit ? <KpEditor onAdjust={handleKpAdjust} disabled={adjustKp.isPending} /> : null}
+              </>
+            )}
           </div>
         </div>
 

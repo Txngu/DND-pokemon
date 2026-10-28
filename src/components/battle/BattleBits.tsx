@@ -96,6 +96,7 @@ const STATUS_SHORT: Partial<Record<PokemonStatus, { label: string; color: string
   paralyzed: { label: "PAR", color: "#C8A400" },
   asleep: { label: "SLP", color: "#6B7280" },
   frozen: { label: "FRZ", color: "#5BB8C4" },
+  confused: { label: "CNF", color: "#D9468F" },
   fainted: { label: "FNT", color: "#4B5563" },
 };
 

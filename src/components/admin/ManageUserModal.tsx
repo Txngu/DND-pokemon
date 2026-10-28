@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Trash2, ShieldAlert, Skull, Swords } from "lucide-react";
+import { Trash2, ShieldAlert, Skull, Swords, Heart, Plus } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { adminInput, adminLabel, adminButtonPrimary, adminButtonSecondary, adminButtonDanger } from "@/components/admin/adminStyles";
@@ -9,7 +9,10 @@ import { ItemIcon } from "@/components/phone/ItemIcon";
 import { SpriteImage } from "@/components/phone/SpriteImage";
 import { toast } from "@/lib/toast";
 import { useCities } from "@/hooks/useProfile";
-import { SpeciesSearch } from "@/components/phone/SpeciesSearch";
+import { CreatePokemonForm } from "@/components/phone/CreatePokemonForm";
+import { AdminPokemonHpPanel } from "@/components/admin/AdminPokemonHpPanel";
+import { StatusBadge } from "@/components/phone/StatusBadge";
+import { useRealtimeInvalidate } from "@/hooks/useEncounter";
 import {
   useAdminUpdateProfile,
   useQuickGrant,
@@ -20,6 +23,7 @@ import {
   useAdminDeleteUser,
   useAdminResetPassword,
   useAllItemsCatalog,
+  useAllProfiles,
 } from "@/hooks/useAdmin";
 import { useAdminSetPokemonDead } from "@/hooks/useBattle";
 import { PokemonBattleSetupPanel } from "@/components/admin/battle/PokemonBattleSetupPanel";
@@ -54,11 +58,15 @@ export function ManageUserModal({
   const [moneyAmount, setMoneyAmount] = React.useState("100");
   const [giveItemId, setGiveItemId] = React.useState("");
   const [giveItemQty, setGiveItemQty] = React.useState("1");
-  const [givePokemonSpecies, setGivePokemonSpecies] = React.useState("1");
-  const [givePokemonLevel, setGivePokemonLevel] = React.useState("5");
-  const [givePokemonNature, setGivePokemonNature] = React.useState("Hardy");
-  const [givePokemonAbility, setGivePokemonAbility] = React.useState("");
-  const [givePokemonShiny, setGivePokemonShiny] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [hpTargetId, setHpTargetId] = React.useState<string | null>(null);
+  const { data: allProfiles } = useAllProfiles();
+  // KP changes the trainer makes (or battles) show up here live.
+  useRealtimeInvalidate(
+    `admin-user-pokemon-${profile.id}`,
+    [{ table: "trainer_pokemon", filter: `profile_id=eq.${profile.id}` }],
+    [["admin", "profile_pokemon", profile.id], ["pokemon_hp_events"]]
+  );
   const [deadTarget, setDeadTarget] = React.useState<TrainerPokemon | null>(null);
   const [setupTargetId, setSetupTargetId] = React.useState<string | null>(null);
   const setDead = useAdminSetPokemonDead();
@@ -102,26 +110,6 @@ export function ManageUserModal({
     quickGrant.mutate(
       { kind: "items", message: "", payload: { items: [{ item_id: giveItemId, quantity: qty }] }, profileId: profile.id, adminId },
       { onSuccess: () => toast("Item granted", "success") }
-    );
-  }
-
-  function givePokemon() {
-    quickGrant.mutate(
-      {
-        kind: "pokemon",
-        message: "",
-        payload: {
-          species_id: Number(givePokemonSpecies),
-          level: Math.max(1, Math.min(100, Number(givePokemonLevel) || 5)),
-          nature: givePokemonNature,
-          ability: givePokemonAbility.trim() || "Unknown",
-          max_hp: Math.max(1, Number(givePokemonLevel) * 3 + 10),
-          is_shiny: givePokemonShiny,
-        },
-        profileId: profile.id,
-        adminId,
-      },
-      { onSuccess: () => toast("Pokémon granted", "success") }
     );
   }
 
@@ -220,11 +208,24 @@ export function ManageUserModal({
             pokemon.map((p) => (
               <div key={p.id} className="flex items-center gap-2 rounded-md bg-white/5 px-2 py-1.5">
                 <SpriteImage src={pokemonSpriteUrl(p.species_id)} alt={p.species.name} className="h-6 w-6" fallbackClassName="h-6 w-6" />
-                <span className="flex-1 text-xs text-slate-200">
+                <span className="min-w-0 flex-1 text-xs text-slate-200">
                   {p.nickname || p.species.name} · Lv{p.level}
                   {p.is_shiny ? " ✨" : ""}
+                  <span className="ml-1.5 font-mono text-[11px] text-slate-400">
+                    {p.current_hp}/{p.max_hp} KP
+                  </span>
+                  <span className="ml-1.5 text-[10px] text-slate-500">{p.party_slot != null ? "Team" : "PC"}</span>
                   {p.is_dead ? <span className="ml-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-400">Dead</span> : null}
                 </span>
+                {!p.is_dead && p.status !== "healthy" ? <StatusBadge status={p.status} className="shrink-0" /> : null}
+                <button
+                  type="button"
+                  title="KP: damage / set"
+                  onClick={() => setHpTargetId(hpTargetId === p.id ? null : p.id)}
+                  className={hpTargetId === p.id ? "text-volt" : "text-slate-500 hover:text-volt"}
+                >
+                  <Heart className="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   title="Battle setup (moves & stats)"
@@ -256,37 +257,29 @@ export function ManageUserModal({
           const target = pokemon?.find((p) => p.id === setupTargetId);
           return target ? <PokemonBattleSetupPanel key={target.id} pokemon={target} onClose={() => setSetupTargetId(null)} /> : null;
         })()}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-56">
-            <SpeciesSearch value={Number(givePokemonSpecies)} onChange={(id) => id && setGivePokemonSpecies(String(id))} />
-          </div>
-          <input
-            className={`${adminInput} w-20`}
-            placeholder="Level"
-            inputMode="numeric"
-            value={givePokemonLevel}
-            onChange={(e) => setGivePokemonLevel(e.target.value)}
-          />
-          <input
-            className={`${adminInput} w-28`}
-            placeholder="Nature"
-            value={givePokemonNature}
-            onChange={(e) => setGivePokemonNature(e.target.value)}
-          />
-          <input
-            className={`${adminInput} w-32`}
-            placeholder="Ability"
-            value={givePokemonAbility}
-            onChange={(e) => setGivePokemonAbility(e.target.value)}
-          />
-          <label className="flex items-center gap-1.5 text-xs text-slate-300">
-            <input type="checkbox" checked={givePokemonShiny} onChange={(e) => setGivePokemonShiny(e.target.checked)} className="h-4 w-4 accent-volt" />
-            Shiny
-          </label>
-          <button type="button" className={adminButtonPrimary} onClick={givePokemon} disabled={quickGrant.isPending}>
-            Give Pokémon
-          </button>
-        </div>
+        {(() => {
+          const target = pokemon?.find((p) => p.id === hpTargetId);
+          return target ? <AdminPokemonHpPanel key={target.id} pokemon={target} onClose={() => setHpTargetId(null)} /> : null;
+        })()}
+        {profile.role === "trainer" ? (
+          createOpen ? (
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+              <p className="mb-3 text-sm font-semibold text-slate-100">Create Pokémon</p>
+              <CreatePokemonForm
+                tone="admin"
+                profileId={profile.id}
+                trainers={allProfiles ?? [profile]}
+                teamCountFor={(id) => (id === profile.id ? pokemon?.filter((p) => p.party_slot != null).length : undefined)}
+                onCancel={() => setCreateOpen(false)}
+              />
+            </div>
+          ) : (
+            <button type="button" className={`${adminButtonPrimary} flex items-center gap-1.5`} onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Pokémon
+            </button>
+          )
+        ) : null}
       </section>
 
       <AdminTcgCollection profileId={profile.id} />
