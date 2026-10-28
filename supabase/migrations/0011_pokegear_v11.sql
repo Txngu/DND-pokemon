@@ -1059,7 +1059,8 @@ do $$
 declare
   v_totals constant jsonb := '{"2":10,"3":25,"4":45,"5":70,"6":100,"7":140,"8":200}';
 begin
-  if exists (select 1 from public.game_config where key = 'xp_model' and value #>> '{}' = 'total') then
+  -- (also skipped once PokéGear 13 has switched to per-level XP)
+  if exists (select 1 from public.game_config where key = 'xp_model' and value #>> '{}' in ('total', 'per_level')) then
     return;
   end if;
 

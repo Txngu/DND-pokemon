@@ -526,6 +526,27 @@ Run `supabase/migrations/0013_pokegear_turns.sql` in the Supabase SQL editor (**
 
 The app no longer calculates anything in battle: no moves, stats, types, natures, abilities, critical hits or random misses (those screens are gone; the old data stays in the database unused). Status conditions are labels the GM handles at the table; items still cure them.
 
+## PokéGear Version 13: Encounter Manager, catching, per-level XP
+
+### Deploying
+Run `supabase/migrations/0014_pokegear_v13.sql` in the Supabase SQL editor (**after** 0013), then push. Safe to run twice. Run the migrations in order and only once each; re-running an older file (0001–0013) after 0014 would put old functions back.
+
+**XP reset:** on the first run, every Pokémon's XP goes to 0 (levels are kept) — that is the switch to the new XP system.
+
+### XP: every level starts at 0
+- Lv1 needs 10 XP, Lv2 25, Lv3 45, Lv4 70, Lv5 100, Lv6 140, Lv7 200 (max level 8). Reaching it = level +1, XP back to 0, +5 max KP.
+- Battle XP is a **pool** per trainer. The trainer chooses which Pokémon that **fought in that battle** (were sent out) get how much. A Pokémon only takes what it needs for its next level; the rest stays in the pool, so nothing is lost — the pool stays open (also after a refresh) until it's used up. The GM can close a pool that can't be used (e.g. every fighter is at the max level).
+
+### Encounter Manager (admin → Encounters)
+- **Create encounter:** name, type (wild, gym, arena, …), catching yes/no, who fights, and the enemies: trainers (with a team), teams, Pokémon from the library, or quick wild Pokémon (×quantity). Then **Start now (don't save)**, **Save for later**, or **Save & start**.
+- **Saved:** start a saved encounter any number of times (each start is a new battle; the saved setup never changes), edit, duplicate, delete. Catching can be changed for one battle when starting.
+- **Trainers / Teams / Pokémon:** the GM's reusable library (searchable, filterable). No limit of 6 or 9 — up to 50 per wild entry and 200 enemy Pokémon per encounter.
+- In battle, each enemy **trainer** has one active Pokémon and one initiative roll; when it faints the next one comes out (the GM can also switch). Wild Pokémon each roll for themselves.
+
+### Catching
+- Only in encounters where catching is allowed, only **wild** Pokémon, only **during the fight**: on their turn a trainer throws a Poké Ball from the Bag (the ball is used up).
+- The GM decides each attempt (**✅ Caught / ❌ Not caught**) in the battle monitor or the *Catch requests* tab. Caught → the Pokémon goes to the trainer's Team (or PC if the Team is full), leaves the battle, and any other attempt on it is closed. Players see the result live.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
