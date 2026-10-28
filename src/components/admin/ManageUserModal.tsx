@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Trash2, ShieldAlert, Skull, Swords, Heart, Plus } from "lucide-react";
+import { Trash2, ShieldAlert, Skull, Heart, Plus } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
 import { adminInput, adminLabel, adminButtonPrimary, adminButtonSecondary, adminButtonDanger } from "@/components/admin/adminStyles";
@@ -26,7 +26,6 @@ import {
   useAllProfiles,
 } from "@/hooks/useAdmin";
 import { useAdminSetPokemonDead } from "@/hooks/useBattle";
-import { PokemonBattleSetupPanel } from "@/components/admin/battle/PokemonBattleSetupPanel";
 import { AdminTcgCollection } from "@/components/admin/AdminTcgCollection";
 import type { Profile, TrainerPokemon } from "@/types/database.types";
 
@@ -68,7 +67,6 @@ export function ManageUserModal({
     [["admin", "profile_pokemon", profile.id], ["pokemon_hp_events"]]
   );
   const [deadTarget, setDeadTarget] = React.useState<TrainerPokemon | null>(null);
-  const [setupTargetId, setSetupTargetId] = React.useState<string | null>(null);
   const setDead = useAdminSetPokemonDead();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [newPassword, setNewPassword] = React.useState("");
@@ -226,14 +224,6 @@ export function ManageUserModal({
                 >
                   <Heart className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  title="Battle setup (moves & stats)"
-                  onClick={() => setSetupTargetId(setupTargetId === p.id ? null : p.id)}
-                  className={setupTargetId === p.id ? "text-volt" : "text-slate-500 hover:text-volt"}
-                >
-                  <Swords className="h-3.5 w-3.5" />
-                </button>
                 {!p.is_dead ? (
                   <button type="button" title="Mark as dead (permanent)" onClick={() => setDeadTarget(p)} className="text-slate-500 hover:text-rotom-red-light">
                     <Skull className="h-3.5 w-3.5" />
@@ -253,10 +243,6 @@ export function ManageUserModal({
             <p className="px-2 py-3 text-xs text-slate-500">No Pokémon yet.</p>
           )}
         </div>
-        {(() => {
-          const target = pokemon?.find((p) => p.id === setupTargetId);
-          return target ? <PokemonBattleSetupPanel key={target.id} pokemon={target} onClose={() => setSetupTargetId(null)} /> : null;
-        })()}
         {(() => {
           const target = pokemon?.find((p) => p.id === hpTargetId);
           return target ? <AdminPokemonHpPanel key={target.id} pokemon={target} onClose={() => setHpTargetId(null)} /> : null;

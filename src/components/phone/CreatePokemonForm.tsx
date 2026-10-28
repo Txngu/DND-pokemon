@@ -22,11 +22,6 @@ const STATUS_OPTIONS: { value: PokemonStatus; label: string }[] = [
   { value: "fainted", label: "Fainted" },
 ];
 
-const NATURES = [
-  "Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax", "Timid", "Hasty", "Serious",
-  "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash", "Calm", "Gentle", "Sassy", "Careful", "Quirky",
-];
-
 const TEAM_SIZE = 6;
 
 /**
@@ -69,8 +64,6 @@ export function CreatePokemonForm({
   const [status, setStatus] = React.useState<PokemonStatus>("healthy");
   const [shiny, setShiny] = React.useState(false);
   const [toPc, setToPc] = React.useState(false);
-  const [nature, setNature] = React.useState("Hardy");
-  const [ability, setAbility] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => setProfileId(fixedProfileId), [fixedProfileId]);
@@ -135,8 +128,6 @@ export function CreatePokemonForm({
         status: curNum === 0 ? "fainted" : status,
         isShiny: shiny,
         toPc: toPc && !teamFull,
-        nature: admin ? nature : null,
-        ability: admin ? ability.trim() || null : null,
       },
       {
         onSuccess: (result) => {
@@ -262,24 +253,6 @@ export function CreatePokemonForm({
           <input type="checkbox" checked={shiny} onChange={(e) => setShiny(e.target.checked)} className="h-4 w-4 accent-volt" />
           <Sparkles className="h-3.5 w-3.5 text-volt" /> Shiny
         </label>
-        {admin ? (
-          <>
-            <div>
-              <label className={label}>Nature</label>
-              <select className={input} value={nature} onChange={(e) => setNature(e.target.value)}>
-                {NATURES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Ability</label>
-              <input className={input} value={ability} onChange={(e) => setAbility(e.target.value)} placeholder="Optional" />
-            </div>
-          </>
-        ) : null}
       </div>
 
       {teamFull ? (

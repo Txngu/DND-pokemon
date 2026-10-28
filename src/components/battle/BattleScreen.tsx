@@ -1,13 +1,13 @@
 import * as React from "react";
 import { AnimatePresence, motion, useAnimationControls, type AnimationControls, type TargetAndTransition } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Backpack, ChevronDown, ChevronLeft, ScrollText, Swords, Trophy, Users, Zap, Skull, X } from "lucide-react";
+import { Backpack, ChevronDown, ChevronLeft, Dices, ScrollText, Swords, Trophy, Users, Zap, Skull, X } from "lucide-react";
 import { StatusBar } from "@/components/phone/StatusBar";
 import { ItemIcon } from "@/components/phone/ItemIcon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { LIGHT_TYPES, TYPE_COLORS, describeItemEffect, itemUsableOn, typeLabel } from "@/lib/battle";
-import { useBattleAction, useBattleState, type BattleAction } from "@/hooks/useEncounter";
+import { describeItemEffect, itemUsableOn } from "@/lib/battle";
+import { useBattleAction, useBattleState, useSubmitInitiative, type BattleAction } from "@/hooks/useEncounter";
 import {
   BattleHpBar,
   BattleSprite,
@@ -21,9 +21,9 @@ import type {
   BattleBagItem,
   BattleEnemyState,
   BattleEvent,
-  BattleMove,
   BattlePartyPokemon,
   BattleState,
+  BattleTurnEntry,
   PokemonStatus,
 } from "@/types/database.types";
 
@@ -45,12 +45,13 @@ interface Message {
 }
 
 /**
- * The trainer's battle screen for an admin-created encounter. It never
- * calculates anything itself: every button sends an intent to the server
- * (battle_attack / battle_use_item / battle_choose_pokemon), and the list of
- * events that comes back is played as an animation — attack lunge, hit,
- * floating damage number, HP drain, faint — before the screen settles on the
- * server's authoritative state.
+ * The trainer's battle screen for an admin-created encounter, played like
+ * the table plays it (PokéGear 12.1): everyone rolls a d20 for initiative,
+ * then turns go from the highest roll down. On your turn you do one thing —
+ * attack (pick a target, Hit or Miss, type the damage your card does), use
+ * an item, or switch. The app never calculates damage; the server checks
+ * whose turn it is and applies what was typed. Results are played back as
+ * an animation (lunge, hit, floating number, HP drain, faint).
  */
 export function BattleScreen({ encounterId }: { encounterId: string }) {
   const navigate = useNavigate();
@@ -65,6 +66,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const [floaters, setFloaters] = React.useState<Floater[]>([]);
   const [pendingItem, setPendingItem] = React.useState<BattleBagItem | null>(null);
   const [introDone, setIntroDone] = React.useState(false);
+  const submitRoll = useSubmitInitiative();
 
   const playerCtl = useAnimationControls();
   const enemyCtls = React.useRef(new Map<string, AnimationControls>());
@@ -112,6 +114,14 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const target = enemies.find((e) => e.id === targetId && !e.fainted) ?? aliveEnemies[0] ?? enemies[0] ?? null;
   const allies = (state?.players ?? []).filter((p) => p.profile_id !== me?.profile_id);
   const busy = playing || action.isPending;
+
+  // Turn order (initiative)
+  const order: BattleTurnEntry[] = state?.order ?? [];
+  const phase = state?.encounter.phase ?? "fighting";
+  const myEntry = order.find((o) => o.battle_player_id === me?.battle_player_id) ?? null;
+  const current = order.find((o) => o.is_current) ?? null;
+  const myTurn = phase === "fighting" && !!me && current?.battle_player_id === me.battle_player_id;
+  const needsRoll = !!myEntry && myEntry.awaiting && (phase === "initiative" || myEntry.position === null);
 
   // Keep a valid target selected.
   React.useEffect(() => {
@@ -339,13 +349,21 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
       : status === "lost"
         ? "The battle was lost…"
         : "The battle has ended."
-    : !active
+    : needsRoll
+      ? (myEntry?.rolls.length ?? 0) > 0
+        ? "It's a tie — roll your d20 again!"
+        : "Roll your d20 for initiative!"
+      : phase === "initiative"
+        ? "Waiting for everyone's initiative roll…"
+        : !active
       ? "Choose a Pokémon to send out!"
       : activeDown
         ? usable.length
           ? `${active.name} can't fight. Choose another Pokémon!`
           : "You're out of usable Pokémon — your allies fight on!"
-        : `What will ${active.name} do?`;
+        : myTurn
+          ? `Your turn! What will ${active.name} do?`
+          : `Waiting — it's ${current?.name ?? "someone else"}'s turn.`;
   const lastLog = [...state.logs].reverse().find((l) => l.message && l.actor_profile_id !== me?.profile_id);
   const shown: Message = message ?? { text: idleText, sub: lastLog?.message ?? null };
 
@@ -379,8 +397,10 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
         ) : null}
       </div>
 
+      <TurnStrip order={order} phase={phase} round={state.encounter.round} meId={me?.battle_player_id ?? null} />
+
       {/* Arena */}
-      <div className="relative mx-3 mt-2 h-[44%] min-h-[230px] shrink-0 overflow-hidden rounded-3xl ring-1 ring-white/10">
+      <div className="relative mx-3 mt-2 h-[36%] min-h-[190px] shrink-0 overflow-hidden rounded-3xl ring-1 ring-white/10">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#2b2f6b_0%,#4a4f9a_38%,#6aa37a_62%,#3f7a52_100%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(120%_70%_at_50%_0%,rgba(255,255,255,0.18),transparent_60%)]" />
         <div className="absolute inset-x-0 top-[58%] h-px bg-white/15" />
@@ -519,20 +539,33 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               Back to home
             </button>
           </div>
+        ) : needsRoll && myEntry ? (
+          <InitiativePanel
+            entry={myEntry}
+            order={order}
+            busy={submitRoll.isPending}
+            onSubmit={(roll) =>
+              submitRoll.mutate(
+                { encounterId, roll },
+                { onError: (e) => setMessage({ text: e instanceof Error ? e.message : "That didn't work.", tone: "error" }) }
+              )
+            }
+            onChoosePokemon={!activeId ? () => setPanel("party") : undefined}
+          />
         ) : panel === "main" ? (
           <div className="grid h-full max-h-[150px] grid-cols-2 gap-2">
             <MainButton
-              label="Fight"
+              label="Attack"
               icon={<Swords className="h-5 w-5" />}
               className="bg-gradient-to-br from-rotom-red to-rotom-red-dark text-white"
-              disabled={busy || !active || activeDown}
+              disabled={busy || !myTurn || !active || activeDown || aliveEnemies.length === 0}
               onClick={() => setPanel("fight")}
             />
             <MainButton
               label="Bag"
               icon={<Backpack className="h-5 w-5" />}
               className="bg-gradient-to-br from-amber-400 to-amber-600 text-screen-ink"
-              disabled={busy}
+              disabled={busy || !myTurn}
               onClick={() => setPanel("bag")}
             />
             <MainButton
@@ -554,22 +587,14 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
 
         <AnimatePresence>
           {!over && panel === "fight" && active ? (
-            <SheetPanel title={`${active.name}'s moves`} onBack={() => setPanel("main")} key="fight">
-              {aliveEnemies.length > 1 && target ? (
-                <p className="mb-2 text-[11px] text-mist/60">
-                  Target: <span className="font-semibold text-mist">{target.name}</span> · tap an enemy to change
-                </p>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                {active.moves.map((m) => (
-                  <MoveButton
-                    key={m.id}
-                    move={m}
-                    disabled={busy}
-                    onClick={() => run({ kind: "attack", encounterId, moveId: m.id, targetEnemyId: target?.id ?? null })}
-                  />
-                ))}
-              </div>
+            <SheetPanel title={`${active.name} attacks`} onBack={() => setPanel("main")} key="fight">
+              <AttackPanel
+                enemies={aliveEnemies}
+                targetId={target?.id ?? null}
+                onTarget={setTargetId}
+                busy={busy}
+                onAttack={(enemyId, damage) => run({ kind: "attack", encounterId, targetEnemyId: enemyId, damage })}
+              />
             </SheetPanel>
           ) : null}
 
@@ -628,7 +653,9 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               key="party"
             >
               {activeId && !activeDown ? (
-                <p className="mb-2 text-[11px] text-mist/50">Switching uses your turn — an enemy may attack the newcomer.</p>
+                <p className="mb-2 text-[11px] text-mist/50">
+                  {myTurn ? "Switching uses your turn." : "You can switch on your turn (it uses your turn)."}
+                </p>
               ) : null}
               {usable.length === 0 ? (
                 <p className="py-4 text-center text-xs text-mist/50">None of your party Pokémon can battle right now.</p>
@@ -636,8 +663,12 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               <PartyList
                 party={party}
                 activeId={activeId}
-                isDisabled={(p) => p.id === activeId || p.is_dead || p.status === "fainted" || p.current_hp <= 0}
-                disabledHint={(p) => (p.id === activeId ? "In battle" : p.is_dead ? "Dead" : "Fainted")}
+                isDisabled={(p) =>
+                  p.id === activeId || p.is_dead || p.status === "fainted" || p.current_hp <= 0 || (!!activeId && !activeDown && !myTurn)
+                }
+                disabledHint={(p) =>
+                  p.id === activeId ? "In battle" : p.is_dead ? "Dead" : p.status === "fainted" || p.current_hp <= 0 ? "Fainted" : "Your turn"
+                }
                 busy={busy}
                 onPick={(p) => run({ kind: "switch", encounterId, pokemonId: p.id })}
               />
@@ -749,33 +780,6 @@ function MainButton({
     >
       {icon}
       {label}
-    </motion.button>
-  );
-}
-
-function MoveButton({ move, disabled, onClick }: { move: BattleMove; disabled: boolean; onClick: () => void }) {
-  const color = TYPE_COLORS[move.type];
-  const dark = LIGHT_TYPES.has(move.type);
-  return (
-    <motion.button
-      type="button"
-      whileTap={{ scale: 0.95 }}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "touch-manipulation rounded-xl p-2.5 text-left shadow-glass ring-1 ring-black/20 disabled:opacity-50",
-        dark ? "text-screen-ink" : "text-white"
-      )}
-      style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}
-    >
-      <p className="truncate text-sm font-bold">{move.name}</p>
-      <div className="mt-1 flex items-center justify-between text-[10px] font-semibold opacity-85">
-        <span className="uppercase">{typeLabel(move.type)} · {move.category === "physical" ? "Phys" : "Spec"}</span>
-        <span className="font-mono">
-          {move.power}
-          {move.accuracy ? ` · ${move.accuracy}%` : " · ∞"}
-        </span>
-      </div>
     </motion.button>
   );
 }
@@ -934,5 +938,224 @@ function PokeballIcon() {
       <span className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 bg-current" />
       <span className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-current bg-emerald-500" />
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Turns (PokéGear 12.1)
+// ---------------------------------------------------------------------------
+
+/** Everyone in the fight, in initiative order, with whose turn it is. */
+function TurnStrip({
+  order,
+  phase,
+  round,
+  meId,
+}: {
+  order: BattleTurnEntry[];
+  phase: "initiative" | "fighting";
+  round: number;
+  meId: string | null;
+}) {
+  if (order.length === 0) return null;
+  const current = order.find((o) => o.is_current);
+  const mine = !!current && current.battle_player_id === meId;
+  return (
+    <div className="mx-3 mt-2 rounded-2xl bg-screen-ink/70 px-2.5 py-2 ring-1 ring-white/10">
+      <p className={cn("mb-1.5 text-[11px] font-semibold", mine ? "text-volt" : "text-mist/80")}>
+        {phase === "initiative"
+          ? "🎲 Initiative — everyone rolls a d20"
+          : mine
+            ? `Round ${round} · Your turn!`
+            : `Round ${round} · ${current ? `${current.name}'s turn` : "…"}`}
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {order.map((o) => (
+          <span
+            key={o.id}
+            className={cn(
+              "flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
+              o.is_current
+                ? "bg-volt font-semibold text-screen-ink"
+                : !o.can_act && phase === "fighting"
+                  ? "bg-white/5 text-mist/35 line-through"
+                  : o.kind === "enemy"
+                    ? "bg-rotom-red/20 text-rotom-red-light"
+                    : o.battle_player_id === meId
+                      ? "bg-sky-400/20 text-sky-200"
+                      : "bg-white/10 text-mist/80"
+            )}
+          >
+            <span className="truncate">{o.battle_player_id === meId ? "You" : o.name}</span>
+            <span className="font-mono">{o.awaiting ? "…" : o.roll ?? "?"}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Ask the trainer for their d20 initiative roll (or a tie re-roll). */
+function InitiativePanel({
+  entry,
+  order,
+  busy,
+  onSubmit,
+  onChoosePokemon,
+}: {
+  entry: BattleTurnEntry;
+  order: BattleTurnEntry[];
+  busy: boolean;
+  onSubmit: (roll: number) => void;
+  onChoosePokemon?: () => void;
+}) {
+  const [value, setValue] = React.useState("");
+  const n = Number(value);
+  const valid = value !== "" && Number.isInteger(n) && n >= 1 && n <= 20;
+  const reroll = entry.rolls.length > 0;
+  const tiedWith = reroll
+    ? order.filter((o) => o.id !== entry.id && o.awaiting && o.rolls.join("/") === entry.rolls.join("/")).map((o) => o.name)
+    : [];
+  const waiting = order.filter((o) => o.awaiting && o.id !== entry.id).map((o) => o.name);
+
+  return (
+    <div className="flex h-full flex-col gap-2 rounded-2xl bg-white/5 p-3">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-mist">
+        <Dices className="h-4 w-4 text-volt" />
+        {reroll ? `Tie${tiedWith.length ? ` with ${tiedWith.join(", ")}` : ""} — roll again!` : "Roll your d20 for initiative"}
+      </p>
+      <p className="text-[11px] text-mist/50">Highest roll goes first. Type the number you rolled (1–20).</p>
+      <div className="flex gap-2">
+        <input
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid) onSubmit(n);
+          }}
+          placeholder="d20"
+          aria-label="Your d20 roll"
+          className="w-20 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-center font-mono text-lg text-mist placeholder:text-mist/30 focus:outline-none focus:ring-1 focus:ring-volt"
+        />
+        <button
+          type="button"
+          disabled={!valid || busy}
+          onClick={() => onSubmit(n)}
+          className="flex-1 touch-manipulation rounded-xl bg-volt py-2.5 text-sm font-bold text-screen-ink active:scale-[0.98] disabled:opacity-40"
+        >
+          {busy ? "Sending…" : valid ? `I rolled ${n}` : "Enter your roll"}
+        </button>
+      </div>
+      {waiting.length ? <p className="text-[10px] text-mist/40">Still rolling: {waiting.join(", ")}</p> : null}
+      {onChoosePokemon ? (
+        <button type="button" onClick={onChoosePokemon} className="mt-auto text-left text-[11px] font-semibold text-sky-300">
+          Choose your Pokémon while you wait →
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Attack on your turn: pick the target, then Hit or Miss. On a hit, type the
+ * damage your attack does (the table decides it with the d20 and your card).
+ */
+function AttackPanel({
+  enemies,
+  targetId,
+  onTarget,
+  busy,
+  onAttack,
+}: {
+  enemies: BattleEnemyState[];
+  targetId: string | null;
+  onTarget: (id: string) => void;
+  busy: boolean;
+  onAttack: (enemyId: string, damage: number) => void;
+}) {
+  const [hit, setHit] = React.useState(false);
+  const [value, setValue] = React.useState("");
+  const target = enemies.find((e) => e.id === targetId) ?? enemies[0] ?? null;
+  const n = Number(value);
+  const valid = value !== "" && Number.isInteger(n) && n >= 1 && n <= 9999;
+  if (!target) return <p className="py-6 text-center text-xs text-mist/50">No enemy left to attack.</p>;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-1.5 text-[11px] text-mist/50">Target</p>
+        <div className="flex flex-wrap gap-1.5">
+          {enemies.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => onTarget(e.id)}
+              className={cn(
+                "touch-manipulation rounded-xl px-3 py-1.5 text-xs font-semibold",
+                e.id === target.id ? "bg-volt text-screen-ink" : "bg-white/10 text-mist active:bg-white/15"
+              )}
+            >
+              {e.name} <span className="font-mono font-normal opacity-70">{e.current_hp}/{e.max_hp}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!hit ? (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setHit(true)}
+            className="touch-manipulation rounded-2xl bg-gradient-to-br from-rotom-red to-rotom-red-dark py-4 font-display text-base font-bold uppercase text-white shadow-glass active:scale-95 disabled:opacity-40"
+          >
+            Hit
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onAttack(target.id, 0)}
+            className="touch-manipulation rounded-2xl bg-white/10 py-4 font-display text-base font-bold uppercase text-mist shadow-glass active:scale-95 disabled:opacity-40"
+          >
+            Miss
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[11px] text-mist/50">How much damage does your attack do?</p>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={value}
+              onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && valid) onAttack(target.id, n);
+              }}
+              placeholder="e.g. 30"
+              aria-label="Damage"
+              className="w-24 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-center font-mono text-lg text-mist placeholder:text-mist/30 focus:outline-none focus:ring-1 focus:ring-volt"
+            />
+            <button
+              type="button"
+              disabled={!valid || busy}
+              onClick={() => onAttack(target.id, n)}
+              className="flex-1 touch-manipulation rounded-xl bg-rotom-red py-2.5 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-40"
+            >
+              {valid ? `Deal ${n} damage` : "Type the damage"}
+            </button>
+          </div>
+          {valid ? (
+            <p className="font-mono text-[11px] text-mist/60">
+              {target.name}: {target.current_hp}/{target.max_hp} → {Math.max(0, target.current_hp - n)}/{target.max_hp}
+              {target.current_hp - n <= 0 ? " · faints" : ""}
+            </p>
+          ) : null}
+          <button type="button" onClick={() => setHit(false)} className="text-[11px] text-mist/50">
+            ← Back to Hit / Miss
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

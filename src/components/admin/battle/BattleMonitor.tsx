@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Ban, Crosshair, Flag, Gift, ScrollText, Skull, Swords, Trophy, UserPlus, Users } from "lucide-react";
+import { Ban, Crosshair, Dices, Flag, Gift, ScrollText, Skull, SkipForward, Swords, Trophy, UserPlus, Users } from "lucide-react";
 import { adminButtonDanger, adminButtonPrimary, adminButtonSecondary, adminInput } from "@/components/admin/adminStyles";
 import { KpEditor } from "@/components/phone/KpEditor";
 import { ConfirmDialog } from "@/components/phone/ConfirmDialog";
@@ -12,8 +12,10 @@ import { useAllProfiles } from "@/hooks/useAdmin";
 import {
   useAdminAddBattlePlayers,
   useAdminAdjustEnemyHp,
-  useAdminEnemyAttack,
+  useAdminEnemyTurnAttack,
   useAdminSetBattleStatus,
+  useAdminSetInitiative,
+  useAdminSkipTurn,
   useBattleState,
 } from "@/hooks/useEncounter";
 import type { BattleEncounter, BattleEvent, BattleState } from "@/types/database.types";
@@ -29,7 +31,7 @@ export const STATUS_STYLE: Record<BattleEncounter["status"], { label: string; cl
 function summarize(events: BattleEvent[]) {
   const hits = events.filter((e) => e.type === "attack");
   if (!hits.length) return events[0]?.message ?? "Done";
-  return hits.map((h) => (h.missed ? `${h.attacker_name}: ${h.move_name} missed` : `${h.attacker_name}: ${h.move_name} → -${h.damage}`)).join(" · ");
+  return hits.map((h) => (h.missed ? `${h.attacker_name} missed ${h.target_name}` : `${h.attacker_name} → ${h.target_name} -${h.damage}`)).join(" · ");
 }
 
 /**
@@ -83,8 +85,8 @@ export function BattleMonitor({
               <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", status.cls)}>{status.label}</span>
             </h2>
             <p className="mt-0.5 text-xs text-slate-400">
-              Started {new Date(enc.created_at).toLocaleString()} · {state.players.length} trainer{state.players.length === 1 ? "" : "s"} ·{" "}
-              {enc.enemy_auto_attack ? "enemies counter-attack" : "enemies attack on your command"} · enemy damage ×{Number(enc.enemy_damage_scale)}
+              Started {new Date(enc.created_at).toLocaleString()} · {state.players.length} trainer{state.players.length === 1 ? "" : "s"}
+              {enc.status === "active" ? (enc.phase === "initiative" ? " · rolling for initiative" : ` · round ${enc.round}`) : ""}
             </p>
             {enc.notes ? <p className="mt-1 text-xs text-slate-500">{enc.notes}</p> : null}
           </div>
@@ -113,6 +115,8 @@ export function BattleMonitor({
           </div>
         </div>
       </div>
+
+      {enc.status === "active" && state.order.length > 0 ? <TurnCard state={state} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <EnemiesCard state={state} />
@@ -156,10 +160,7 @@ export function BattleMonitor({
 
 function EnemiesCard({ state }: { state: BattleState }) {
   const adjust = useAdminAdjustEnemyHp();
-  const attack = useAdminEnemyAttack();
   const active = state.encounter.status === "active";
-  const targets = state.players.filter((p) => p.active_pokemon && p.active_pokemon.current_hp > 0 && p.active_pokemon.status !== "fainted");
-  const [targetFor, setTargetFor] = React.useState<Record<string, string>>({});
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#111623] p-4">
@@ -180,53 +181,201 @@ function EnemiesCard({ state }: { state: BattleState }) {
                   {e.fainted ? <span className="text-[10px] font-semibold uppercase text-rotom-red-light">Fainted</span> : null}
                 </div>
                 <BattleHpBar current={e.current_hp} max={e.max_hp} showNumbers className="mt-1" />
-                <p className="text-[10px] text-slate-500">
-                  Atk {e.attack} · Def {e.defense} · SpA {e.sp_attack} · SpD {e.sp_defense} · Spe {e.speed}
-                </p>
-                {e.moves?.length ? <p className="truncate text-[10px] text-slate-500">Moves: {e.moves.map((m) => m.name).join(", ")}</p> : null}
               </div>
             </div>
             {active ? (
-              <div className="mt-2 space-y-2">
+              <div className="mt-2">
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">Adjust KP (outside the turn order)</p>
                 <KpEditor
                   compact
                   disabled={adjust.isPending}
                   onAdjust={(delta) => adjust.mutate({ enemyId: e.id, delta }, { onSuccess: () => toast(`${e.name} ${delta > 0 ? "+" : ""}${delta} KP`, "info") })}
                 />
-                {!e.fainted ? (
-                  <div className="flex items-center gap-2">
-                    <select
-                      className={`${adminInput} !py-1 text-xs`}
-                      value={targetFor[e.id] ?? ""}
-                      onChange={(ev) => setTargetFor((t) => ({ ...t, [e.id]: ev.target.value }))}
-                    >
-                      <option value="">Random trainer Pokémon</option>
-                      {targets.map((p) => (
-                        <option key={p.id} value={p.active_pokemon!.id}>
-                          {p.username}&apos;s {p.active_pokemon!.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={attack.isPending || targets.length === 0}
-                      className={`${adminButtonDanger} flex shrink-0 items-center gap-1 !px-3 !py-1 text-xs`}
-                      onClick={() =>
-                        attack.mutate(
-                          { encounterId: state.encounter.id, enemyId: e.id, targetPokemonId: targetFor[e.id] || null },
-                          { onSuccess: (r) => toast(summarize(r.events), "info") }
-                        )
-                      }
-                    >
-                      <Crosshair className="h-3.5 w-3.5" /> Attack
-                    </button>
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Initiative and turns (PokéGear 12.1): enter each enemy's d20 roll (and fix a
+ * trainer's roll if needed), see whose turn it is, attack with the enemy
+ * whose turn it is, or skip a turn.
+ */
+function TurnCard({ state }: { state: BattleState }) {
+  const setRoll = useAdminSetInitiative();
+  const skip = useAdminSkipTurn();
+  const enc = state.encounter;
+  const order = state.order;
+  const current = order.find((o) => o.is_current) ?? null;
+  const initiative = enc.phase === "initiative";
+
+  return (
+    <div className="rounded-xl border border-volt/30 bg-volt/[0.04] p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
+          <Dices className="h-4 w-4 text-volt" />
+          {initiative ? "Initiative — waiting for d20 rolls" : `Round ${enc.round} · ${current ? `${current.name}'s turn` : "…"}`}
+        </h3>
+        {!initiative && current ? (
+          <button
+            type="button"
+            className={`${adminButtonSecondary} ml-auto flex items-center gap-1.5 !px-3 !py-1 text-xs`}
+            disabled={skip.isPending}
+            onClick={() => skip.mutate({ encounterId: enc.id }, { onSuccess: () => toast(`Skipped ${current.name}'s turn`, "info") })}
+          >
+            <SkipForward className="h-3.5 w-3.5" /> Skip turn
+          </button>
+        ) : null}
+      </div>
+
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {order.map((o) => (
+          <RollRow
+            key={o.id}
+            entry={o}
+            editable={(initiative || o.position === null) && (o.kind === "enemy" || o.awaiting || initiative)}
+            busy={setRoll.isPending}
+            onSet={(roll) => setRoll.mutate({ entryId: o.id, roll }, { onSuccess: () => toast(`${o.name}: ${roll}`, "success") })}
+            dimmed={!initiative && !o.can_act}
+          />
+        ))}
+      </div>
+      {initiative ? (
+        <p className="mt-2 text-[11px] text-slate-400">
+          Trainers type their roll on their phone; you enter one roll per enemy (you can also enter or fix a trainer&apos;s roll). Equal rolls roll
+          again. The fight starts automatically when every roll is in.
+        </p>
+      ) : null}
+
+      {!initiative && current?.kind === "enemy" ? <EnemyTurnForm state={state} enemyName={current.name} /> : null}
+      {!initiative && current?.kind === "player" ? (
+        <p className="mt-3 text-xs text-slate-400">Waiting for {current.name} to act on their phone (attack, item or switch).</p>
+      ) : null}
+    </div>
+  );
+}
+
+function RollRow({
+  entry,
+  editable,
+  busy,
+  onSet,
+  dimmed,
+}: {
+  entry: BattleState["order"][number];
+  editable: boolean;
+  busy: boolean;
+  onSet: (roll: number) => void;
+  dimmed: boolean;
+}) {
+  const [value, setValue] = React.useState("");
+  const n = Number(value);
+  const valid = value !== "" && Number.isInteger(n) && n >= 1 && n <= 20;
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs",
+        entry.is_current ? "bg-volt/20 ring-1 ring-volt/50" : "bg-white/5",
+        dimmed && "opacity-40"
+      )}
+    >
+      <span className="w-5 shrink-0 font-mono text-slate-500">{entry.position ?? "–"}</span>
+      <span className={cn("min-w-0 flex-1 truncate", entry.kind === "enemy" ? "text-rotom-red-light" : "text-slate-100")}>{entry.name}</span>
+      <span className="shrink-0 font-mono text-slate-300">
+        {entry.rolls.length ? entry.rolls.join(" / ") : "—"}
+        {entry.awaiting ? <span className="ml-1 text-amber-300">{entry.rolls.length ? "re-roll" : "waiting"}</span> : null}
+      </span>
+      {editable ? (
+        <span className="flex shrink-0 items-center gap-1">
+          <input
+            className={`${adminInput} !w-12 !px-1.5 !py-0.5 text-center text-xs`}
+            inputMode="numeric"
+            placeholder="d20"
+            value={value}
+            onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+            aria-label={`Roll for ${entry.name}`}
+          />
+          <button
+            type="button"
+            className={`${adminButtonPrimary} !px-2 !py-0.5 text-xs`}
+            disabled={!valid || busy}
+            onClick={() => {
+              onSet(n);
+              setValue("");
+            }}
+          >
+            {entry.awaiting ? "Set" : "Fix"}
+          </button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The enemy whose turn it is attacks: target, Hit/Miss, damage. */
+function EnemyTurnForm({ state, enemyName }: { state: BattleState; enemyName: string }) {
+  const attack = useAdminEnemyTurnAttack();
+  const targets = state.players.filter((p) => p.active_pokemon && p.active_pokemon.current_hp > 0 && p.active_pokemon.status !== "fainted");
+  const [targetId, setTargetId] = React.useState("");
+  const [dmg, setDmg] = React.useState("");
+  const target = targets.find((p) => p.active_pokemon!.id === targetId) ?? targets[0] ?? null;
+  const n = Number(dmg);
+  const valid = dmg !== "" && Number.isInteger(n) && n >= 1 && n <= 9999;
+
+  function send(damage: number) {
+    if (!target) return;
+    attack.mutate(
+      { encounterId: state.encounter.id, targetPokemonId: target.active_pokemon!.id, damage },
+      {
+        onSuccess: (r) => {
+          toast(summarize(r.events), "info");
+          setDmg("");
+        },
+      }
+    );
+  }
+
+  if (!target) {
+    return <p className="mt-3 text-xs text-amber-300">{enemyName} has no target right now — no trainer has a Pokémon out. Skip the turn or wait.</p>;
+  }
+  const ap = target.active_pokemon!;
+  return (
+    <div className="mt-3 rounded-lg bg-rotom-red/10 p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-rotom-red-light">
+        <Crosshair className="h-3.5 w-3.5" /> {enemyName} attacks
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select className={`${adminInput} !w-auto !py-1 text-xs`} value={ap.id} onChange={(e) => setTargetId(e.target.value)}>
+          {targets.map((p) => (
+            <option key={p.id} value={p.active_pokemon!.id}>
+              {p.username}&apos;s {p.active_pokemon!.name} ({p.active_pokemon!.current_hp}/{p.active_pokemon!.max_hp})
+            </option>
+          ))}
+        </select>
+        <input
+          className={`${adminInput} !w-20 !py-1 text-xs`}
+          inputMode="numeric"
+          placeholder="Damage"
+          value={dmg}
+          onChange={(e) => setDmg(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+        />
+        <button type="button" className={`${adminButtonDanger} !px-3 !py-1 text-xs`} disabled={!valid || attack.isPending} onClick={() => send(n)}>
+          Hit for {valid ? n : "…"}
+        </button>
+        <button type="button" className={`${adminButtonSecondary} !px-3 !py-1 text-xs`} disabled={attack.isPending} onClick={() => send(0)}>
+          Miss
+        </button>
+      </div>
+      {valid ? (
+        <p className="mt-1 font-mono text-[11px] text-slate-400">
+          {ap.name}: {ap.current_hp}/{ap.max_hp} → {Math.max(0, ap.current_hp - n)}/{ap.max_hp}
+          {ap.current_hp - n <= 0 ? " · faints" : ""}
+        </p>
+      ) : null}
     </div>
   );
 }

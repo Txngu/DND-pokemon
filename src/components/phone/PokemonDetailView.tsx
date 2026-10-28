@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Star, Swords, Sparkles, Package, Skull, Zap } from "lucide-react";
+import { Star, Sparkles, Package, Skull, Zap } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { ItemIcon } from "@/components/phone/ItemIcon";
@@ -21,12 +21,9 @@ import {
 } from "@/hooks/useBattle";
 import { toast } from "@/lib/toast";
 import { useProfile } from "@/hooks/useProfile";
-import { usePokemonBattleProfile } from "@/hooks/useEncounter";
 import { TypePill } from "@/components/battle/BattleBits";
 import { LinkedCardsStrip } from "@/components/tcg/TcgBits";
 import { useTcgLinks } from "@/hooks/useTcg";
-import { TYPE_COLORS, LIGHT_TYPES } from "@/lib/battle";
-import { cn } from "@/lib/utils";
 import type { TrainerPokemon } from "@/types/database.types";
 
 export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon; onBack: () => void }) {
@@ -39,7 +36,6 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
   const { data: config } = useGameConfig();
   const { data: evoRules } = useEvolutionRulesFor(pokemon.species_id);
   const { data: me } = useProfile();
-  const { data: battleProfile } = usePokemonBattleProfile(pokemon.id);
   const { data: links } = useTcgLinks();
   // KP/XP are changed by battles, items, the Pokémon Center and battle
   // rewards. Direct editing is for the Game Master, unless they've turned
@@ -113,11 +109,6 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
       }
     );
   }
-
-  const stats = [
-    { icon: Sparkles, label: "Nature", value: pokemon.nature },
-    { icon: Swords, label: "Ability", value: pokemon.ability },
-  ];
 
   return (
     <div className="relative flex h-full flex-col">
@@ -229,71 +220,23 @@ export function PokemonDetailView({ pokemon, onBack }: { pokemon: TrainerPokemon
           </div>
         ) : null}
 
-        {/* Battle: types, stats and moves used by the battle engine */}
-        {battleProfile ? (
-          <div className="mb-3">
-            <div className="mb-1.5 flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-wide text-mist/50">Battle</p>
-              <div className="flex gap-1">
-                <TypePill type={battleProfile.type1} />
-                <TypePill type={battleProfile.type2} />
-              </div>
-            </div>
-            <div className="glass space-y-2.5 rounded-2xl p-3">
-              <div className="grid grid-cols-5 gap-1 text-center">
-                {(
-                  [
-                    ["Atk", battleProfile.stats.attack],
-                    ["Def", battleProfile.stats.defense],
-                    ["SpA", battleProfile.stats.sp_attack],
-                    ["SpD", battleProfile.stats.sp_defense],
-                    ["Spe", battleProfile.stats.speed],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-white/5 py-1.5">
-                    <p className="text-[9px] uppercase tracking-wide text-mist/45">{label}</p>
-                    <p className="font-mono text-xs font-semibold text-mist">{value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {battleProfile.moves.map((m) => (
-                  <div
-                    key={m.id}
-                    className={cn("rounded-lg px-2 py-1.5", LIGHT_TYPES.has(m.type) ? "text-screen-ink" : "text-white")}
-                    style={{ background: TYPE_COLORS[m.type] }}
-                  >
-                    <p className="truncate text-xs font-bold">{m.name}</p>
-                    <p className="text-[9px] font-semibold opacity-80">
-                      {m.category === "physical" ? "Physical" : "Special"} · {m.power} pow{m.accuracy ? ` · ${m.accuracy}%` : ""}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {!battleProfile.custom_moves ? (
-                <p className="text-center text-[10px] text-mist/40">Default moves for its type and level</p>
-              ) : null}
+        {/* Types (from the species). PokéGear 12.1: no stats, moves, nature or
+            ability — attacks and damage are decided at the table. */}
+        {pokemon.species.type1 ? (
+          <div className="glass mb-2.5 flex items-center justify-between rounded-2xl p-3">
+            <p className="text-[10px] uppercase tracking-wide text-mist/50">Types</p>
+            <div className="flex gap-1">
+              <TypePill type={pokemon.species.type1} />
+              <TypePill type={pokemon.species.type2} />
             </div>
           </div>
         ) : null}
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {stats.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="glass rounded-2xl p-3">
-              <div className="mb-1 flex items-center gap-1.5 text-mist/50">
-                <Icon className="h-3.5 w-3.5" />
-                <span className="text-[10px] uppercase tracking-wide">{label}</span>
-              </div>
-              <p className="truncate text-sm font-medium text-mist">{value}</p>
-            </div>
-          ))}
-        </div>
 
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
           disabled={pokemon.is_dead}
-          className="glass mt-2.5 flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left active:bg-white/10 disabled:opacity-50"
+          className="glass flex w-full touch-manipulation items-center gap-3 rounded-2xl p-3 text-left active:bg-white/10 disabled:opacity-50"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5">
             {pokemon.held_item ? <ItemIcon item={pokemon.held_item} className="h-7 w-7" /> : <Package className="h-5 w-5 text-mist/40" />}

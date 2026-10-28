@@ -1,21 +1,23 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Plus, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
+import { Copy, Plus, Sparkles, Trash2, Users } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { adminButtonPrimary, adminButtonSecondary, adminInput, adminLabel } from "@/components/admin/adminStyles";
-import { MoveOptions } from "@/components/admin/battle/PokemonBattleSetupPanel";
 import { BattleSprite, TypePill } from "@/components/battle/BattleBits";
 import { SpeciesSearch } from "@/components/phone/SpeciesSearch";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { POKEMON_TYPES, defaultEnemyHp, estimateDamage, pokemonStat, typeLabel } from "@/lib/battle";
+import { defaultEnemyHp } from "@/lib/battle";
 import { useAllProfiles } from "@/hooks/useAdmin";
 import { useSpecies } from "@/hooks/useBag";
-import { useGameConfig } from "@/hooks/useBattle";
-import { fetchSuggestedMoves, useAdminCreateBattle, useMoves, type EnemyDraftPayload } from "@/hooks/useEncounter";
-import type { Move, PokemonType } from "@/types/database.types";
+import { useAdminCreateBattle, type EnemyDraftPayload } from "@/hooks/useEncounter";
 
+/**
+ * PokéGear 12.1: enemies are just a Pokémon, a name, a level and KP. There
+ * are no stats or moves — at the table, the GM types each enemy's damage
+ * on its turn.
+ */
 interface EnemyDraft {
   key: string;
   speciesId: string;
@@ -23,29 +25,11 @@ interface EnemyDraft {
   level: string;
   maxHp: string;
   currentHp: string;
-  attack: string;
-  defense: string;
-  spAttack: string;
-  spDefense: string;
-  speed: string;
-  type1: string;
-  type2: string;
-  moves: string[];
-  autoStats: boolean;
   autoHp: boolean;
-  autoMoves: boolean;
 }
-
-const DAMAGE_PRESETS = [
-  { value: 0.25, label: "Gentle", hint: "×0.25" },
-  { value: 0.5, label: "Light", hint: "×0.5" },
-  { value: 1, label: "Normal", hint: "×1" },
-  { value: 1.5, label: "Brutal", hint: "×1.5" },
-];
 
 let keySeq = 0;
 function newEnemy(level = 5): EnemyDraft {
-  const stat = String(pokemonStat(level));
   return {
     key: `e${++keySeq}`,
     speciesId: "",
@@ -53,17 +37,7 @@ function newEnemy(level = 5): EnemyDraft {
     level: String(level),
     maxHp: String(defaultEnemyHp(level)),
     currentHp: String(defaultEnemyHp(level)),
-    attack: stat,
-    defense: stat,
-    spAttack: stat,
-    spDefense: stat,
-    speed: stat,
-    type1: "normal",
-    type2: "",
-    moves: ["", "", "", ""],
-    autoStats: true,
     autoHp: true,
-    autoMoves: true,
   };
 }
 
@@ -75,8 +49,6 @@ const num = (v: string, fallback = 0) => {
 export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
   const { data: profiles } = useAllProfiles();
   const { data: species } = useSpecies();
-  const { data: moves } = useMoves();
-  const { data: config } = useGameConfig();
   const create = useAdminCreateBattle();
 
   const [name, setName] = React.useState("");
@@ -84,8 +56,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
   const [playerIds, setPlayerIds] = React.useState<Set<string>>(new Set());
   const [search, setSearch] = React.useState("");
   const [enemies, setEnemies] = React.useState<EnemyDraft[]>(() => [newEnemy()]);
-  const [autoAttack, setAutoAttack] = React.useState(true);
-  const [damageScale, setDamageScale] = React.useState(1);
 
   const reset = React.useCallback(() => {
     setName("");
@@ -93,8 +63,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
     setPlayerIds(new Set());
     setSearch("");
     setEnemies([newEnemy()]);
-    setAutoAttack(true);
-    setDamageScale(1);
   }, []);
 
   // Trainers already in an active encounter can't be added to a second one.
@@ -109,29 +77,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
         .eq("encounter.mode", "auto");
       if (error) throw error;
       return new Set((data ?? []).map((r) => r.profile_id as string));
-    },
-  });
-
-  // Selected trainers' party, for the damage preview.
-  const selectedKey = [...playerIds].sort().join(",");
-  const { data: partyStats } = useQuery({
-    queryKey: ["admin", "party_stats", selectedKey],
-    enabled: open && playerIds.size > 0,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("trainer_pokemon")
-        .select("level, max_hp")
-        .in("profile_id", [...playerIds])
-        .not("party_slot", "is", null)
-        .eq("is_dead", false);
-      if (error) throw error;
-      const rows = data ?? [];
-      if (!rows.length) return null;
-      return {
-        avgLevel: Math.round(rows.reduce((s, r) => s + r.level, 0) / rows.length),
-        minHp: Math.min(...rows.map((r) => r.max_hp)),
-        maxHp: Math.max(...rows.map((r) => r.max_hp)),
-      };
     },
   });
 
@@ -152,44 +97,22 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
     setEnemies((list) => list.map((e) => (e.key === key ? { ...e, ...changes } : e)));
   }
 
-  async function suggestMoves(key: string, t1: string, t2: string, level: number) {
-    try {
-      const suggested = await fetchSuggestedMoves(t1 || "normal", t2 || null, level);
-      const ids = suggested.map((m) => String(m.id));
-      setEnemies((list) =>
-        list.map((e) => (e.key === key ? { ...e, moves: [0, 1, 2, 3].map((i) => ids[i] ?? ""), autoMoves: true } : e))
-      );
-    } catch {
-      // leave moves as they are; the server falls back to defaults anyway
-    }
-  }
-
   function onSpecies(e: EnemyDraft, speciesId: string) {
     const sp = species?.find((s) => String(s.id) === speciesId);
     const prevSpecies = species?.find((s) => String(s.id) === e.speciesId);
     const changes: Partial<EnemyDraft> = { speciesId };
-    if (sp) {
-      if (!e.name || e.name === prevSpecies?.name) changes.name = sp.name;
-      changes.type1 = sp.type1 ?? "normal";
-      changes.type2 = sp.type2 ?? "";
-    }
+    if (sp && (!e.name || e.name === prevSpecies?.name)) changes.name = sp.name;
     patch(e.key, changes);
-    if (e.autoMoves) suggestMoves(e.key, changes.type1 ?? e.type1, changes.type2 ?? e.type2, num(e.level, 5));
   }
 
   function onLevel(e: EnemyDraft, value: string) {
     const level = Math.max(1, num(value, 1));
     const changes: Partial<EnemyDraft> = { level: value };
-    if (e.autoStats) {
-      const s = String(pokemonStat(level));
-      Object.assign(changes, { attack: s, defense: s, spAttack: s, spDefense: s, speed: s });
-    }
     if (e.autoHp) {
       changes.maxHp = String(defaultEnemyHp(level));
       changes.currentHp = String(defaultEnemyHp(level));
     }
     patch(e.key, changes);
-    if (e.autoMoves && value) suggestMoves(e.key, e.type1, e.type2, level);
   }
 
   const errors: string[] = [];
@@ -208,14 +131,6 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
       level: Math.max(1, num(e.level, 1)),
       max_hp: num(e.maxHp),
       current_hp: num(e.currentHp),
-      attack: Math.max(1, num(e.attack, 1)),
-      defense: Math.max(1, num(e.defense, 1)),
-      sp_attack: Math.max(1, num(e.spAttack, 1)),
-      sp_defense: Math.max(1, num(e.spDefense, 1)),
-      speed: Math.max(1, num(e.speed, 1)),
-      type1: e.type1,
-      type2: e.type2 || null,
-      move_ids: e.moves.filter(Boolean).map(Number),
     }));
     create.mutate(
       {
@@ -223,20 +138,16 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
         description: description.trim(),
         playerIds: [...playerIds],
         enemies: payload,
-        enemyAutoAttack: autoAttack,
-        enemyDamageScale: damageScale,
       },
       {
         onSuccess: (id) => {
-          toast("Encounter started — the trainers' battle screens are opening", "success");
+          toast("Encounter started — everyone rolls for initiative first", "success");
           reset();
           onCreated(id);
         },
       }
     );
   }
-
-  const baseScale = config?.damageScale ?? 5;
 
   return (
     <AdminModal open={open} title="New battle encounter" onClose={onClose} width="max-w-4xl">
@@ -319,53 +230,22 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
               key={e.key}
               index={idx}
               enemy={e}
-              moves={moves}
-              partyStats={partyStats ?? null}
-              baseScale={baseScale}
-              enemyScale={damageScale}
+              species={species}
               canRemove={enemies.length > 1}
               canDuplicate={enemies.length < 6}
               onPatch={(c) => patch(e.key, c)}
               onSpecies={(v) => onSpecies(e, v)}
               onLevel={(v) => onLevel(e, v)}
-              onSuggestMoves={() => suggestMoves(e.key, e.type1, e.type2, num(e.level, 5))}
               onRemove={() => setEnemies((l) => l.filter((x) => x.key !== e.key))}
               onDuplicate={() => setEnemies((l) => [...l.slice(0, idx + 1), { ...e, key: `e${++keySeq}` }, ...l.slice(idx + 1)])}
             />
           ))}
         </section>
 
-        {/* Behaviour */}
-        <section className="grid gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-200">
-            <input type="checkbox" className="mt-0.5 accent-[rgb(255,210,63)]" checked={autoAttack} onChange={(e) => setAutoAttack(e.target.checked)} />
-            <span>
-              Enemies fight back automatically
-              <span className="block text-xs text-slate-500">
-                After each trainer action, an enemy counter-attacks. Turn off to trigger enemy attacks yourself.
-              </span>
-            </span>
-          </label>
-          <div>
-            <p className="mb-1 text-sm text-slate-200">Enemy damage</p>
-            <div className="flex flex-wrap gap-1.5">
-              {DAMAGE_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setDamageScale(p.value)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium",
-                    damageScale === p.value ? "bg-volt text-screen-ink" : "bg-white/5 text-slate-300 hover:bg-white/10"
-                  )}
-                >
-                  {p.label} <span className="opacity-60">{p.hint}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Scales only what enemies deal to trainers&apos; Pokémon.</p>
-          </div>
-        </section>
+        <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-400">
+          When the encounter starts, every trainer rolls a d20 on their phone and you enter one roll per enemy. Turns go from the highest roll
+          down; on an enemy&apos;s turn you pick its target and type the damage (0 = miss) in the battle monitor.
+        </p>
 
         {errors.length && (playerIds.size > 0 || enemies.some((e) => e.speciesId || e.name)) ? (
           <ul className="space-y-0.5 text-xs text-amber-300">
@@ -392,66 +272,27 @@ export function CreateBattleModal({ open, onClose, onCreated }: { open: boolean;
 function EnemyEditor({
   index,
   enemy: e,
-  moves,
-  partyStats,
-  baseScale,
-  enemyScale,
+  species,
   canRemove,
   canDuplicate,
   onPatch,
   onSpecies,
   onLevel,
-  onSuggestMoves,
   onRemove,
   onDuplicate,
 }: {
   index: number;
   enemy: EnemyDraft;
-  moves: Move[] | undefined;
-  partyStats: { avgLevel: number; minHp: number; maxHp: number } | null;
-  baseScale: number;
-  enemyScale: number;
+  species: ReturnType<typeof useSpecies>["data"];
   canRemove: boolean;
   canDuplicate: boolean;
   onPatch: (c: Partial<EnemyDraft>) => void;
   onSpecies: (v: string) => void;
   onLevel: (v: string) => void;
-  onSuggestMoves: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
 }) {
-  const level = Math.max(1, num(e.level, 1));
-  const chosenMoves = e.moves.map((id) => moves?.find((m) => String(m.id) === id)).filter(Boolean) as Move[];
-
-  // Preview: this enemy's strongest move against an average trainer Pokémon,
-  // and a typical trainer hit against this enemy.
-  const preview = React.useMemo(() => {
-    const defLevel = partyStats?.avgLevel ?? level;
-    const best = chosenMoves
-      .map((m) => {
-        const stab = m.type === e.type1 || m.type === e.type2;
-        const atk = m.category === "physical" ? num(e.attack, 1) : num(e.spAttack, 1);
-        return estimateDamage({ level, power: m.power, attack: atk, defense: pokemonStat(defLevel), scale: baseScale * enemyScale, stab });
-      })
-      .sort((a, b) => b - a)[0];
-    const trainerHit = estimateDamage({
-      level: defLevel,
-      power: 80,
-      attack: pokemonStat(defLevel),
-      defense: Math.min(num(e.defense, 1), num(e.spDefense, 1)) || 1,
-      scale: baseScale,
-      stab: true,
-    });
-    return { enemyHit: best ?? null, trainerHit, hitsToKo: Math.ceil(num(e.currentHp, 1) / Math.max(trainerHit, 1)) };
-  }, [chosenMoves, e.type1, e.type2, e.attack, e.spAttack, e.defense, e.spDefense, e.currentHp, level, partyStats, baseScale, enemyScale]);
-
-  const statField = (label: string, key: "attack" | "defense" | "spAttack" | "spDefense" | "speed") => (
-    <div>
-      <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
-      <input className={`${adminInput} !px-2 !py-1.5`} inputMode="numeric" value={e[key]} onChange={(ev) => onPatch({ [key]: ev.target.value.replace(/\D/g, ""), autoStats: false } as Partial<EnemyDraft>)} />
-    </div>
-  );
-
+  const sp = e.speciesId ? species?.find((s) => String(s.id) === e.speciesId) : null;
   return (
     <div className="rounded-xl border border-white/10 bg-[#0e1220] p-3">
       <div className="flex gap-3">
@@ -504,87 +345,12 @@ function EnemyEditor({
               </button>
             </div>
           </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="w-28">
-              <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">Type</p>
-              <select className={`${adminInput} !py-1.5`} value={e.type1} onChange={(ev) => onPatch({ type1: ev.target.value })}>
-                {POKEMON_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {typeLabel(t)}
-                  </option>
-                ))}
-              </select>
+          {sp ? (
+            <div className="flex gap-1">
+              <TypePill type={sp.type1} />
+              <TypePill type={sp.type2} />
             </div>
-            <div className="w-28">
-              <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">2nd type</p>
-              <select className={`${adminInput} !py-1.5`} value={e.type2} onChange={(ev) => onPatch({ type2: ev.target.value })}>
-                <option value="">—</option>
-                {POKEMON_TYPES.filter((t) => t !== e.type1).map((t) => (
-                  <option key={t} value={t}>
-                    {typeLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid flex-1 grid-cols-5 gap-1.5">
-              {statField("Atk", "attack")}
-              {statField("Def", "defense")}
-              {statField("SpA", "spAttack")}
-              {statField("SpD", "spDefense")}
-              {statField("Spe", "speed")}
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-0.5 flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Moves {e.autoMoves ? "· suggested" : ""}</p>
-              <button type="button" onClick={onSuggestMoves} className="flex items-center gap-1 text-[11px] text-volt hover:underline">
-                <Wand2 className="h-3 w-3" /> Suggest for type & level
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-              {e.moves.map((id, i) => (
-                <select
-                  key={i}
-                  className={`${adminInput} !px-2 !py-1.5 text-xs`}
-                  value={id}
-                  onChange={(ev) => onPatch({ moves: e.moves.map((v, k) => (k === i ? ev.target.value : v)), autoMoves: false })}
-                >
-                  <option value="">— none —</option>
-                  <MoveOptions moves={moves} />
-                </select>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-400">
-            <span className="flex gap-1">
-              <TypePill type={e.type1 as PokemonType} />
-              {e.type2 ? <TypePill type={e.type2 as PokemonType} /> : null}
-            </span>
-            {preview.enemyHit !== null ? (
-              <span>
-                Hits trainers for ≈ <b className="text-slate-200">{preview.enemyHit} KP</b>
-                {partyStats ? (
-                  <>
-                    {" "}
-                    (their Pokémon: Lv~{partyStats.avgLevel}, {partyStats.minHp}–{partyStats.maxHp} KP)
-                  </>
-                ) : null}
-              </span>
-            ) : (
-              <span>No moves chosen — defaults for its type are used.</span>
-            )}
-            <span>
-              Typical trainer hit ≈ <b className="text-slate-200">{preview.trainerHit}</b> → ~{preview.hitsToKo} hits to defeat
-            </span>
-            {preview.enemyHit !== null && partyStats && preview.enemyHit >= partyStats.minHp ? (
-              <span className="w-full text-amber-300">
-                ⚠️ One hit would knock out their weakest Pokémon ({partyStats.minHp} KP). Consider a gentler “Enemy damage” setting below or lower Atk/SpA.
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       </div>
     </div>
