@@ -490,6 +490,29 @@ No more persistent notifications for fainting, healing, reviving, "battle ended"
 - Search by name, set, number or card ID; add copies to *My Cards*; search/filter/sort/favourite/remove; link cards to your RPG Pokémon (a card can be linked as many times as you own copies). The GM can view any player's collection (read-only) in Manage User.
 - TCG cards are separate from the RPG — they never change stats or battles.
 
+## PokéGear Version 12: Pokémon creation, KP damage, Bag, Shop prices
+
+### Deploying
+1. In the Supabase SQL editor run `supabase/migrations/0012_pokegear_v12.sql` (**after** 0011). Running it twice is harmless.
+2. Push to `main` — GitHub Actions builds and deploys.
+
+### Creating Pokémon
+- **Game Master:** Users → Manage → *Create Pokémon*. Pick the trainer, species (sprite and types fill in automatically), nickname, level (1–max level), max KP, current KP, status, shiny, nature, ability.
+- **Trainers:** only when the GM ticks *Trainers can create their own Pokémon* on the admin Dashboard; then a *New Pokémon* button appears in the Team app. A trainer can only ever create Pokémon for themselves (checked by the server).
+- It goes into a free Team slot, otherwise into the first free PC slot (a new box is made if needed) — never lost. XP is set to the start of the chosen level. Current KP 0 = fainted.
+
+### KP damage
+- Trainers: *Take damage* on any of their own Pokémon (Pokémon details). Allowed during battles too. Only lowers KP; 0 = fainted.
+- Game Master: the ❤ button next to a Pokémon in Users → Manage: deal damage (with confirmation), set KP/status exactly (0 = fainted, above 0 revives), mark as fainted, recent KP history.
+- Everything uses the one `current_hp` on the Pokémon — Team, PC, details, battles and the Pokémon Center all show the same value and refresh live. If the trainer is in a battle, the damage also appears in the battle log and can end the battle.
+- Every KP change is recorded in `pokemon_hp_events` with its source (battle, status effect, Pokémon Center, GM, trainer, level up…). No notifications are sent for KP changes.
+
+### Items & Shop
+- New status **Confused** and the item **Calming Remedy** (₽200) that cures it in battle. Full Heal and the Pokémon Center cure it as well.
+- Shop prices: Poké Ball 200 · Great Ball 600 · Ultra Ball 1200 · Potion 200 · Super Potion 500 · Revive 800 · Awakening 200 · Antidote 150 · Paralyze Heal 200 · Ice Heal 250 · Burn Heal 250 · Calming Remedy 200 · Full Heal 700. Everything else was taken off the shelf (disabled, not deleted — switch any back on in the Shop's admin panel).
+- `shop_listings.price` is the single price; purchases are checked on the server and now also go into the money ledger (`money_transactions`).
+- The Bag's pockets are a two-row grid (always all visible) with a search box.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
