@@ -122,9 +122,8 @@ export const HP_SOURCE_LABELS: Record<string, string> = {
   battle_item: "Item in battle",
   status_effect: "Status effect",
   pokemon_center: "Pokémon Center",
-  kp_editor: "KP editor",
+  healing: "Healing (Pokémon Center / KP editor)",
   level_up: "Level up",
-  gm: "Game Master",
   system: "System",
   other: "Other",
 };
