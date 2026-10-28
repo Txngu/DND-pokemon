@@ -1,6 +1,6 @@
 export type UserRole = "trainer" | "admin";
 export type ItemCategory = "poke_ball" | "medicine" | "evolution" | "battle" | "key_item" | "quest" | "other";
-export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "fainted";
+export type PokemonStatus = "healthy" | "poisoned" | "burned" | "paralyzed" | "asleep" | "frozen" | "confused" | "fainted";
 export type TradeStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
 export type RewardKind = "money" | "items" | "pokemon";
 export type RewardStatus = "draft" | "sent";
@@ -501,6 +501,7 @@ export interface Database {
           status: PokemonStatus;
           is_favorite: boolean;
           caught_at: string;
+          updated_at: string;
           party_slot: number | null;
           box_id: string | null;
           box_slot: number | null;
@@ -527,6 +528,7 @@ export interface Database {
           status?: PokemonStatus;
           is_favorite?: boolean;
           caught_at?: string;
+          updated_at?: string;
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
@@ -553,6 +555,7 @@ export interface Database {
           status?: PokemonStatus;
           is_favorite?: boolean;
           caught_at?: string;
+          updated_at?: string;
           party_slot?: number | null;
           box_id?: string | null;
           box_slot?: number | null;
@@ -936,6 +939,23 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      pokemon_hp_events: {
+        Row: {
+          id: string;
+          pokemon_id: string;
+          profile_id: string;
+          previous_hp: number;
+          new_hp: number;
+          max_hp: number;
+          delta: number;
+          source: string;
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       tcg_collection: {
         Row: {
           id: string;
@@ -1174,6 +1194,27 @@ export interface Database {
       tcg_set_favorite: { Args: { p_collection_id: string; p_favorite: boolean }; Returns: void };
       tcg_link_card: { Args: { p_collection_id: string; p_pokemon_id: string }; Returns: unknown };
       tcg_unlink_card: { Args: { p_link_id: string }; Returns: void };
+      damage_pokemon: { Args: { p_pokemon_id: string; p_amount: number }; Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"] };
+      admin_set_pokemon_hp: {
+        Args: { p_pokemon_id: string; p_current_hp: number; p_status?: PokemonStatus | null };
+        Returns: Database["public"]["Tables"]["trainer_pokemon"]["Row"];
+      };
+      create_pokemon: {
+        Args: {
+          p_profile_id: string;
+          p_species_id: number;
+          p_nickname: string | null;
+          p_level: number;
+          p_max_hp: number;
+          p_current_hp: number;
+          p_status?: PokemonStatus;
+          p_is_shiny?: boolean;
+          p_to_pc?: boolean;
+          p_nature?: string | null;
+          p_ability?: string | null;
+        };
+        Returns: unknown;
+      };
       suggest_moves: {
         Args: { p_type1: string; p_type2: string | null; p_level: number };
         Returns: Database["public"]["Tables"]["moves"]["Row"][];
@@ -1473,3 +1514,4 @@ export interface XpClaimResult {
 
 export type TcgCollectionEntry = Database["public"]["Tables"]["tcg_collection"]["Row"];
 export type TcgCardLink = Database["public"]["Tables"]["tcg_card_links"]["Row"];
+export type PokemonHpEvent = Database["public"]["Tables"]["pokemon_hp_events"]["Row"];

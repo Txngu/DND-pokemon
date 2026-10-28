@@ -2,6 +2,9 @@ import { Users, PawPrint, Package, Coins, ArrowLeftRight, UserCheck } from "luci
 import { StatCard } from "@/components/admin/StatCard";
 import { useAdminStats, useRecentActivity } from "@/hooks/useAdmin";
 import { ACTIVITY_LABELS } from "@/lib/adminActivity";
+import { useGameConfig } from "@/hooks/useBattle";
+import { useSetGameConfigFlag } from "@/hooks/usePokemonHp";
+import { toast } from "@/lib/toast";
 
 function timeAgo(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -11,6 +14,37 @@ function timeAgo(iso: string) {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function GameSettings() {
+  const { data: config } = useGameConfig();
+  const setFlag = useSetGameConfigFlag();
+  const on = !!config?.playerCreatePokemon;
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#111623] p-4">
+      <h2 className="mb-3 text-sm font-semibold text-slate-100">Game settings</h2>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 accent-volt"
+          checked={on}
+          disabled={!config || setFlag.isPending}
+          onChange={(e) =>
+            setFlag.mutate(
+              { key: "player_create_pokemon", value: e.target.checked },
+              { onSuccess: () => toast(e.target.checked ? "Trainers can now create Pokémon" : "Pokémon creation is GM-only again", "success") }
+            )
+          }
+        />
+        <span>
+          <span className="block text-sm text-slate-200">Trainers can create their own Pokémon</span>
+          <span className="block text-xs text-slate-400">
+            Shows a “New Pokémon” button in each trainer&apos;s Team app. You can always create Pokémon for any trainer under Users → Manage.
+          </span>
+        </span>
+      </label>
+    </div>
+  );
 }
 
 export default function AdminDashboard() {
@@ -40,6 +74,8 @@ export default function AdminDashboard() {
           <StatCard icon={ArrowLeftRight} label="Pending trades" value={stats.pendingTrades} />
         </div>
       )}
+
+      <GameSettings />
 
       <div className="rounded-xl border border-white/10 bg-[#111623]">
         <div className="border-b border-white/10 px-4 py-3">

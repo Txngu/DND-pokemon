@@ -205,7 +205,7 @@ export default function AdminRewards() {
             <div>
               <label className={adminLabel}>Status</label>
               <select className={adminInput} value={pkStatus} onChange={(e) => setPkStatus(e.target.value)}>
-                {["healthy", "poisoned", "burned", "paralyzed", "asleep", "frozen", "fainted"].map((s) => (
+                {["healthy", "poisoned", "burned", "paralyzed", "asleep", "frozen", "confused", "fainted"].map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

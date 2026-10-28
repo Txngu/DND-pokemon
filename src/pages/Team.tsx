@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDownToLine, Plus, Search, Sparkles, Star, Swords, Users, X } from "lucide-react";
+import { ArrowDownToLine, Plus, Search, Sparkles, Star, Swords, Users, X, PlusCircle } from "lucide-react";
 import { AppScreenHeader } from "@/components/phone/AppScreenHeader";
 import { PokemonSprite } from "@/components/phone/PokemonSprite";
 import { PokemonDetailView } from "@/components/phone/PokemonDetailView";
@@ -9,6 +9,9 @@ import { XpBar } from "@/components/phone/XpBar";
 import { StatusBadge } from "@/components/phone/StatusBadge";
 import { TypePill } from "@/components/battle/BattleBits";
 import { CollectionCardDetail, LinkedCardsStrip } from "@/components/tcg/TcgBits";
+import { CreatePokemonForm } from "@/components/phone/CreatePokemonForm";
+import { useGameConfig } from "@/hooks/useBattle";
+import { useProfile } from "@/hooks/useProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { matchesPokemonQuery } from "@/lib/pokemonSearch";
 import { toast } from "@/lib/toast";
@@ -31,6 +34,12 @@ export default function Team() {
   const { data: myBattle } = useMyBattle();
   const toPc = useMoveToPc();
   const toTeam = useMoveToTeam();
+  const { data: config } = useGameConfig();
+  const { data: me } = useProfile();
+  const [createOpen, setCreateOpen] = React.useState(false);
+  // PokéGear 12: trainers may create Pokémon for themselves when the GM
+  // has switched it on (the GM creates Pokémon in the admin panel).
+  const canCreate = me?.role === "trainer" && !!config?.playerCreatePokemon;
 
   const [detailId, setDetailId] = React.useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -132,6 +141,17 @@ export default function Team() {
               </button>
             ))}
 
+            {canCreate ? (
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-xs font-semibold text-volt active:bg-white/10"
+              >
+                <PlusCircle className="h-4 w-4" />
+                New Pokémon
+              </button>
+            ) : null}
+
             {team.length === 0 && pokemon.length === 0 ? (
               <p className="py-6 text-center text-xs text-mist/50">You don&apos;t have any Pokémon yet.</p>
             ) : null}
@@ -157,6 +177,17 @@ export default function Team() {
           />
         ) : null}
         {openCard ? <CollectionCardDetail entry={openCard} onClose={() => setOpenCard(null)} /> : null}
+        {createOpen && me ? (
+          <BottomSheet title="New Pokémon" onClose={() => setCreateOpen(false)}>
+            <CreatePokemonForm
+              tone="phone"
+              profileId={me.id}
+              teamCountFor={() => team.length}
+              onDone={() => setCreateOpen(false)}
+              onCancel={() => setCreateOpen(false)}
+            />
+          </BottomSheet>
+        ) : null}
       </AnimatePresence>
     </div>
   );
@@ -232,6 +263,29 @@ function PcPicker({
             <p className="py-2 text-center text-[11px] text-mist/40">Showing 60 of {list.length} — refine the search to see more.</p>
           ) : null}
         </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function BottomSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <motion.div className="absolute inset-0 z-40 flex flex-col justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <motion.div
+        className="relative z-10 flex max-h-[90%] flex-col rounded-t-3xl border-t border-white/10 bg-screen-deep p-4 shadow-glass"
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", stiffness: 380, damping: 34 }}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-display text-sm font-semibold text-mist">{title}</p>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-mist" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto pb-1">{children}</div>
       </motion.div>
     </motion.div>
   );
