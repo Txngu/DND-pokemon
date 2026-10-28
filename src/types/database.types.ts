@@ -1686,7 +1686,7 @@ export type PokemonHpEvent = Database["public"]["Tables"]["pokemon_hp_events"]["
 export type EncounterKind = "wild" | "trainer" | "gym" | "rival" | "boss" | "arena" | "story" | "team" | "custom";
 export type CatchStatus = "pending" | "caught" | "not_caught" | "cancelled";
 
-export interface GmTrainer {
+export type GmTrainer = {
   id: string;
   name: string;
   description: string | null;
@@ -1695,9 +1695,9 @@ export interface GmTrainer {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface GmPokemon {
+export type GmPokemon = {
   id: string;
   species_id: number | null;
   name: string;
@@ -1709,18 +1709,18 @@ export interface GmPokemon {
   notes: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface GmTeam {
+export type GmTeam = {
   id: string;
   name: string;
   description: string | null;
   trainer_id: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface EncounterTemplate {
+export type EncounterTemplate = {
   id: string;
   name: string;
   description: string | null;
@@ -1732,9 +1732,9 @@ export interface EncounterTemplate {
   last_started_at: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface EncounterTemplateEntryRow {
+export type EncounterTemplateEntryRow = {
   id: string;
   template_id: string;
   position: number;
@@ -1747,7 +1747,7 @@ export interface EncounterTemplateEntryRow {
   level: number | null;
   max_hp: number | null;
   quantity: number;
-}
+};
 
 /** One thing in an encounter (sent to admin_save_encounter_template / admin_start_encounter). */
 export type EncounterEntry =
@@ -1756,7 +1756,7 @@ export type EncounterEntry =
   | { kind: "pokemon"; gm_pokemon_id: string }
   | { kind: "wild"; species_id?: number | null; name?: string | null; level: number; max_hp: number; quantity: number };
 
-export interface CatchAttempt {
+export type CatchAttempt = {
   id: string;
   encounter_id: string;
   enemy_id: string;
@@ -1770,7 +1770,7 @@ export interface CatchAttempt {
   result_pokemon_id: string | null;
   note: string | null;
   created_at: string;
-}
+};
 
 export interface XpPoolPokemon {
   id: string;
