@@ -513,6 +513,19 @@ No more persistent notifications for fainting, healing, reviving, "battle ended"
 - `shop_listings.price` is the single price; purchases are checked on the server and now also go into the money ledger (`money_transactions`).
 - The Bag's pockets are a two-row grid (always all visible) with a search box.
 
+## PokéGear 12.1: Tabletop battles (initiative & turns)
+
+### Deploying
+Run `supabase/migrations/0013_pokegear_turns.sql` in the Supabase SQL editor (**after** 0012), then push. Safe to run twice. Battles that are running at that moment switch over and ask everyone for an initiative roll.
+
+### How a fight works now
+1. **Initiative:** every trainer types their d20 roll on their phone; the GM enters one roll per enemy in the battle monitor (and can enter or fix a trainer's roll). Equal rolls roll again. The order runs from highest to lowest and everyone sees it, with whose turn it is.
+2. **Turns:** on your turn you do **one** thing: **Attack** (pick the enemy → *Hit* or *Miss* → on a hit type the damage your card does; Miss = 0), use an **item**, or **switch** Pokémon. Sending out your first Pokémon or replacing one that fainted is free.
+3. **Enemy turns:** in the battle monitor the GM picks the target trainer's Pokémon and clicks *Hit for X* or *Miss*. The GM can also *Skip turn* (e.g. someone stepped away) and still adjust KP at any time.
+4. Fainted enemies and trainers with no usable Pokémon are skipped; after the last one, the next round starts. Victory/defeat, rewards and XP work as before.
+
+The app no longer calculates anything in battle: no moves, stats, types, natures, abilities, critical hits or random misses (those screens are gone; the old data stays in the database unused). Status conditions are labels the GM handles at the table; items still cure them.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
