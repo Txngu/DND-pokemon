@@ -36,6 +36,9 @@ interface Overrides {
   myHp: Record<string, number>;
   myStatus: Record<string, PokemonStatus>;
   activeId?: string | null;
+  /** PokéGear 13.1: which enemies stand in the arena during a playback, so a
+   *  live refresh can't swap a trainer's Pokémon before the animation does. */
+  arenaIds?: string[];
 }
 
 const NO_OVERRIDES: Overrides = { enemyHp: {}, myHp: {}, myStatus: {} };
@@ -118,7 +121,12 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const aliveEnemies = enemies.filter((e) => !e.fainted && e.on_field);
   // (on_field comes from the server state, which only refreshes after a
   // playback, so a Pokémon that faints on screen stays for its animation.)
-  const arenaEnemies = enemies.filter((e) => !e.caught && e.on_field);
+  // PokéGear 13.1: during my own playback the arena line-up is held by the
+  // animation (an enemy trainer's next Pokémon walks in on its "sends out"
+  // step); otherwise it follows the live server state.
+  const arenaEnemies = ov.arenaIds
+    ? ov.arenaIds.map((id) => enemies.find((e) => e.id === id)).filter((e): e is BattleEnemyState => !!e && !e.caught)
+    : enemies.filter((e) => !e.caught && e.on_field);
   const shownEnemies = arenaEnemies.slice(0, 6);
   const hiddenCount = arenaEnemies.length - shownEnemies.length;
   const target = aliveEnemies.find((e) => e.id === targetId) ?? aliveEnemies[0] ?? null;
@@ -152,6 +160,36 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
     }
     catchStatus.current = new Map(mine.map((c) => [c.id, c.status]));
   }, [state, me?.profile_id]);
+
+  // PokéGear 13.1: an enemy trainer's Pokémon switching in because of
+  // someone else (another trainer's knockout, the Game Master) is announced
+  // too. My own turns announce it during playback instead.
+  const prevTrainerActive = React.useRef<Map<string, string | null> | null>(null);
+  React.useEffect(() => {
+    if (!state) return;
+    const prev = prevTrainerActive.current;
+    if (prev && !playing) {
+      for (const t of state.enemy_trainers) {
+        if (!prev.has(t.id) || !t.active_enemy_id || prev.get(t.id) === t.active_enemy_id) continue;
+        const sent = state.enemies.find((e) => e.id === t.active_enemy_id);
+        if (!sent) continue;
+        const text = `${t.name} sends out ${sent.name}!`;
+        setMessage({ text });
+        window.setTimeout(() => setMessage((m) => (m?.text === text ? null : m)), 2500);
+      }
+    }
+    prevTrainerActive.current = new Map(state.enemy_trainers.map((t) => [t.id, t.active_enemy_id]));
+  }, [state, playing]);
+
+  // Enemies already shown once don't play their entrance again; anything
+  // that arrives later (a trainer's next Pokémon) does.
+  const seenEnemies = React.useRef<Set<string> | null>(null);
+  const shownIds = shownEnemies.map((e) => e.id).join(",");
+  React.useEffect(() => {
+    if (!state) return;
+    if (!seenEnemies.current) seenEnemies.current = new Set();
+    for (const id of shownIds.split(",")) if (id) seenEnemies.current.add(id);
+  }, [state, shownIds]);
 
   // Turn order (initiative)
   const order: BattleTurnEntry[] = state?.order ?? [];
@@ -284,6 +322,25 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
           await sleep(700);
           break;
         }
+        case "enemy_switch": {
+          // The trainer's fainted Pokémon leaves and the next one walks in
+          // (EnemySlot plays the entrance when it first appears).
+          setMessage({ text: ev.message });
+          const trainerId = ev.trainer_id;
+          const newId = ev.enemy_id;
+          if (newId) {
+            setOv((o) => {
+              const ids = o.arenaIds ?? [];
+              const keep = ids.filter((id) => id !== newId && enemies.find((e) => e.id === id)?.enemy_trainer_id !== trainerId);
+              const at = ids.findIndex((id) => enemies.find((e) => e.id === id)?.enemy_trainer_id === trainerId);
+              const next = [...keep];
+              next.splice(at < 0 ? next.length : Math.min(at, next.length), 0, newId);
+              return { ...o, arenaIds: next };
+            });
+          }
+          await sleep(1200);
+          break;
+        }
         case "item": {
           setMessage({ text: ev.message });
           await sleep(450);
@@ -340,6 +397,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
       myHp: Object.fromEntries(party.map((p) => [p.id, p.current_hp])),
       myStatus: Object.fromEntries(party.map((p) => [p.id, p.status])),
       activeId,
+      arenaIds: arenaEnemies.map((e) => e.id),
     });
     try {
       const result = await action.mutateAsync(act);
@@ -464,6 +522,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                 onSelect={() => !e.fainted && setTargetId(e.id)}
                 register={registerEnemy}
                 floaters={floaters}
+                entering={!!seenEnemies.current && !seenEnemies.current.has(e.id)}
               />
             ))}
           </div>
@@ -779,6 +838,7 @@ function EnemySlot({
   onSelect,
   register,
   floaters,
+  entering = false,
 }: {
   enemy: BattleEnemyState;
   count: number;
@@ -786,12 +846,19 @@ function EnemySlot({
   onSelect: () => void;
   register: (id: string, ctl: AnimationControls | null) => void;
   floaters: Floater[];
+  /** First time this Pokémon is on screen mid-battle: play its entrance. */
+  entering?: boolean;
 }) {
   const ctl = useAnimationControls();
+  // Only the value at mount matters (a sprite enters once).
+  const [enterOnMount] = React.useState(entering);
   React.useEffect(() => {
     register(enemy.id, ctl);
     return () => register(enemy.id, null);
   }, [enemy.id, ctl, register]);
+  React.useEffect(() => {
+    if (enterOnMount) void ctl.start({ x: 0, y: 0, opacity: [0, 1, 1], scale: [0.2, 1.12, 1], transition: { duration: 0.5 } });
+  }, [enterOnMount, ctl]);
 
   const size = count === 1 ? "h-full w-[70%]" : count === 2 ? "h-[85%] w-1/2" : count === 3 ? "h-[62%] w-1/3" : "h-1/2 w-1/3";
 
@@ -812,7 +879,7 @@ function EnemySlot({
           <ChevronDown className="h-4 w-4" strokeWidth={3} />
         </motion.div>
       ) : null}
-      <motion.div className="relative h-full w-full" animate={ctl} initial={{ opacity: 1 }}>
+      <motion.div className="relative h-full w-full" animate={ctl} initial={enterOnMount ? { opacity: 0, scale: 0.2 } : { opacity: 1 }}>
         <BattleSprite
           speciesId={enemy.species_id}
           spriteUrl={enemy.sprite_url}

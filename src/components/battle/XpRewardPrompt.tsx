@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 import { useAllocateXp, useMyXpPools } from "@/hooks/useEncounter";
 import type { XpAllocationResult, XpPool, XpPoolPokemon } from "@/types/database.types";
 
-type Summary = { pool: XpPool; lines: { pokemon_name: string; amount: number; level_before: number; level_after: number }[] };
+type Summary = {
+  pool: XpPool;
+  lines: { pokemon_name: string; amount: number; level_before: number; level_after: number }[];
+  /** PokéGear 13.1: XP nobody that fought could take (all max level). */
+  dropped: number;
+};
 
 /**
  * Battle XP (PokéGear 13). Each trainer gets an XP pool and shares it out
@@ -70,6 +75,7 @@ export function XpRewardPrompt() {
             setSummary({
               pool,
               lines: [...pool.allocations, { pokemon_name: r.name, amount: r.used, level_before: r.level_before, level_after: r.level_after }],
+              dropped: r.dropped ?? 0,
             });
           }
         },
@@ -310,6 +316,11 @@ function SummaryCard({ summary, onDone }: { summary: Summary; onDone: () => void
       <p className="mt-2 text-center font-mono text-sm text-mist">
         {used} / {summary.pool.total} XP used · <span className="text-emerald-300">0 left</span>
       </p>
+      {summary.dropped > 0 ? (
+        <p className="mt-1 text-center text-[11px] text-mist/60">
+          {summary.dropped} XP dropped — the Pokémon that fought are all max level.
+        </p>
+      ) : null}
       <button type="button" onClick={onDone} className="mt-3 touch-manipulation rounded-2xl bg-volt py-3 text-sm font-bold text-screen-ink active:scale-[0.98]">
         Done
       </button>
