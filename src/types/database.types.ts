@@ -1611,7 +1611,7 @@ export interface BattleBall {
 
 /** One step of a resolved battle action, played back in order by the battle screen. */
 export interface BattleEvent {
-  type: "attack" | "faint" | "blocked" | "status" | "chip" | "item" | "switch" | "victory" | "defeat";
+  type: "attack" | "faint" | "blocked" | "status" | "chip" | "item" | "switch" | "enemy_switch" | "victory" | "defeat";
   side?: "player" | "enemy";
   message: string;
   detail?: string | null;
@@ -1639,6 +1639,11 @@ export interface BattleEvent {
   revived?: boolean;
   cured?: boolean;
   status_after?: PokemonStatus;
+  /** PokéGear 13.1 — "enemy_switch": an enemy trainer sends out its next Pokémon. */
+  trainer_id?: string;
+  trainer_name?: string;
+  enemy_id?: string;
+  enemy_name?: string;
 }
 
 export interface BattleActionResult {
@@ -1808,6 +1813,9 @@ export interface XpAllocationResult {
   species_after: number;
   evolved_to: string | null;
   remaining: number;
+  /** PokéGear 13.1: XP of this reward that was dropped because none of the
+   *  Pokémon that fought can take it any more (all max level). */
+  dropped: number;
 }
 
 export const ENCOUNTER_KINDS: { value: EncounterKind; label: string }[] = [
