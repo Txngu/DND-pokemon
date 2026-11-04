@@ -547,6 +547,20 @@ Run `supabase/migrations/0014_pokegear_v13.sql` in the Supabase SQL editor (**af
 - Only in encounters where catching is allowed, only **wild** Pokémon, only **during the fight**: on their turn a trainer throws a Poké Ball from the Bag (the ball is used up).
 - The GM decides each attempt (**✅ Caught / ❌ Not caught**) in the battle monitor or the *Catch requests* tab. Caught → the Pokémon goes to the trainer's Team (or PC if the Team is full), leaves the battle, and any other attempt on it is closed. Players see the result live.
 
+## PokéGear 13.1: No stuck XP, enemy switches on screen
+
+### Deploying
+Run `supabase/migrations/0015_pokegear_v13_1.sql` in the Supabase SQL editor (**after** 0014), then push. Safe to run twice. No XP is reset.
+
+### XP for max-level Pokémon is dropped
+- When none of the Pokémon a trainer used in a battle can take XP any more (all max level 8, dead, or no longer theirs), that trainer's battle XP is **dropped automatically**: no XP window opens and nothing stays saved.
+- Same while handing out XP: once the Pokémon still able to level are full, whatever is left is dropped. The summary shows how much was dropped, and the battle log says so.
+- On the first run, pools that were already stuck this way are cleared.
+
+### Enemy switches on the player's battle screen
+- When an enemy trainer's Pokémon faints from your attack, the playback shows it fainting, then "*Trainer* sends out *Pokémon*!" and the next one comes in with an entrance animation in the same spot.
+- Switches you didn't cause (another player's knockout, the GM switching or lowering KP) are announced the same way as soon as they happen.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
