@@ -728,7 +728,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                 targetId={target?.id ?? null}
                 onTarget={setTargetId}
                 busy={busy}
-                onAttack={(enemyId, damage, hit, d20) => run({ kind: "attack", encounterId, targetEnemyId: enemyId, damage, hit, d20 })}
+                onAttack={(enemyId, damage, hit) => run({ kind: "attack", encounterId, targetEnemyId: enemyId, damage, hit, d20: null })}
               />
             </SheetPanel>
           ) : null}
@@ -1539,18 +1539,15 @@ function AttackPanel({
   targetId: string | null;
   onTarget: (id: string) => void;
   busy: boolean;
-  onAttack: (enemyId: string, damage: number, hit: boolean, d20: number | null) => void;
+  onAttack: (enemyId: string, damage: number, hit: boolean) => void;
 }) {
   const [hit, setHit] = React.useState(false);
   const [value, setValue] = React.useState("");
-  const [roll, setRoll] = React.useState("");
   const target = enemies.find((e) => e.id === targetId) ?? enemies[0] ?? null;
   const n = Number(value);
   // A hit can do 0 damage (e.g. it had no effect).
   const valid = value !== "" && Number.isInteger(n) && n >= 0 && n <= 9999;
-  const r = Number(roll);
-  const rollValid = roll === "" || (Number.isInteger(r) && r >= 1 && r <= 20);
-  const d20 = roll === "" || !rollValid ? null : r;
+  // Hit / Miss is the result of the table's d20; the roll itself isn't typed in.
   if (!target) return <p className="py-6 text-center text-xs text-mist/50">No enemy left to attack.</p>;
 
   return (
@@ -1575,30 +1572,12 @@ function AttackPanel({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <label htmlFor="atk-d20" className="text-[11px] text-mist/50">
-          Your d20 roll <span className="text-mist/35">(optional, for the log)</span>
-        </label>
-        <input
-          id="atk-d20"
-          inputMode="numeric"
-          value={roll}
-          onChange={(e) => setRoll(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
-          placeholder="d20"
-          aria-label="Your d20 roll"
-          className={cn(
-            "ml-auto w-16 rounded-xl border bg-white/5 px-2 py-1.5 text-center font-mono text-sm text-mist placeholder:text-mist/30 focus:outline-none focus:ring-1 focus:ring-volt",
-            rollValid ? "border-white/15" : "border-rotom-red"
-          )}
-        />
-      </div>
-      {!rollValid ? <p className="-mt-2 text-[11px] text-rotom-red-light">A d20 roll is 1–20.</p> : null}
 
       {!hit ? (
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            disabled={busy || !rollValid}
+            disabled={busy}
             onClick={() => setHit(true)}
             className="touch-manipulation rounded-2xl bg-gradient-to-br from-rotom-red to-rotom-red-dark py-4 font-display text-base font-bold uppercase text-white shadow-glass active:scale-95 disabled:opacity-40"
           >
@@ -1606,8 +1585,8 @@ function AttackPanel({
           </button>
           <button
             type="button"
-            disabled={busy || !rollValid}
-            onClick={() => onAttack(target.id, 0, false, d20)}
+            disabled={busy}
+            onClick={() => onAttack(target.id, 0, false)}
             className="touch-manipulation rounded-2xl bg-white/10 py-4 font-display text-base font-bold uppercase text-mist shadow-glass active:scale-95 disabled:opacity-40"
           >
             Miss
@@ -1623,7 +1602,7 @@ function AttackPanel({
               value={value}
               onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && valid && rollValid) onAttack(target.id, n, true, d20);
+                if (e.key === "Enter" && valid) onAttack(target.id, n, true);
               }}
               placeholder="e.g. 30"
               aria-label="Damage"
@@ -1631,8 +1610,8 @@ function AttackPanel({
             />
             <button
               type="button"
-              disabled={!valid || !rollValid || busy}
-              onClick={() => onAttack(target.id, n, true, d20)}
+              disabled={!valid || busy}
+              onClick={() => onAttack(target.id, n, true)}
               className="flex-1 touch-manipulation rounded-xl bg-rotom-red py-2.5 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-40"
             >
               {valid ? (n === 0 ? "Hit — no damage" : `Deal ${n} damage`) : "Type the damage"}
