@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AnimatePresence, motion, useAnimationControls, type AnimationControls, type TargetAndTransition } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Backpack, ChevronDown, ChevronLeft, Dices, ScrollText, Swords, Trophy, Users, Zap, Skull, X } from "lucide-react";
+import { Backpack, ChevronDown, ChevronLeft, Dices, Swords, Trophy, Users, Zap, Skull, X } from "lucide-react";
 import { StatusBar } from "@/components/phone/StatusBar";
 import { ItemIcon } from "@/components/phone/ItemIcon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,7 +29,7 @@ import type {
   PokemonStatus,
 } from "@/types/database.types";
 
-type Panel = "main" | "fight" | "bag" | "party" | "log";
+type Panel = "main" | "fight" | "bag" | "party" | "field";
 
 interface Overrides {
   enemyHp: Record<string, number>;
@@ -39,6 +39,9 @@ interface Overrides {
   /** PokéGear 13.1: which enemies stand in the arena during a playback, so a
    *  live refresh can't swap a trainer's Pokémon before the animation does. */
   arenaIds?: string[];
+  /** PokéGear 14: a trainer's next Pokémon, known from the playback before
+   *  the refresh (players can't see a trainer's bench). */
+  sentOut?: Record<string, BattleEnemyState>;
 }
 
 const NO_OVERRIDES: Overrides = { enemyHp: {}, myHp: {}, myStatus: {} };
@@ -93,14 +96,14 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   // Derived view of the battle, with playback overrides layered on top.
   // ---------------------------------------------------------------------
   const me = state?.me;
-  const enemies: BattleEnemyState[] = React.useMemo(
-    () =>
-      (state?.enemies ?? []).map((e) => {
-        const hp = ov.enemyHp[e.id] ?? e.current_hp;
-        return { ...e, current_hp: hp, fainted: hp <= 0 };
-      }),
-    [state?.enemies, ov.enemyHp]
-  );
+  const enemies: BattleEnemyState[] = React.useMemo(() => {
+    const known = state?.enemies ?? [];
+    const extra = Object.values(ov.sentOut ?? {}).filter((x) => !known.some((e) => e.id === x.id));
+    return [...known, ...extra].map((e) => {
+      const hp = ov.enemyHp[e.id] ?? e.current_hp;
+      return { ...e, current_hp: hp, fainted: hp <= 0 };
+    });
+  }, [state?.enemies, ov.enemyHp, ov.sentOut]);
   const party: BattlePartyPokemon[] = React.useMemo(
     () =>
       (me?.party ?? []).map((p) => ({
@@ -130,6 +133,12 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
   const shownEnemies = arenaEnemies.slice(0, 6);
   const hiddenCount = arenaEnemies.length - shownEnemies.length;
   const target = aliveEnemies.find((e) => e.id === targetId) ?? aliveEnemies[0] ?? null;
+  // Enemy trainers' benches are hidden from players, so count from the trainers.
+  const wildEnemies = enemies.filter((e) => !e.enemy_trainer_id);
+  const enemyTotals = {
+    total: wildEnemies.length + (state?.enemy_trainers ?? []).reduce((n, t) => n + t.total, 0),
+    left: wildEnemies.filter((e) => !e.fainted && !e.caught).length + (state?.enemy_trainers ?? []).reduce((n, t) => n + t.remaining, 0),
+  };
   const trainerOf = (e: BattleEnemyState | null) => (e?.enemy_trainer_id ? state?.enemy_trainers.find((t) => t.id === e.enemy_trainer_id) ?? null : null);
   const catchable = enemies.filter((e) => e.catchable);
   const myCatches = state?.catches.filter((c) => c.profile_id === me?.profile_id) ?? [];
@@ -173,7 +182,9 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
         if (!prev.has(t.id) || !t.active_enemy_id || prev.get(t.id) === t.active_enemy_id) continue;
         const sent = state.enemies.find((e) => e.id === t.active_enemy_id);
         if (!sent) continue;
-        const text = `${t.name} sends out ${sent.name}!`;
+        // "Brock withdraws Geodude and sends out Onix!" when the GM switched.
+        const logLine = [...state.logs].reverse().find((l) => l.action === "trainer_switch" && l.enemy_id === sent.id)?.message;
+        const text = logLine ?? `${t.name} sends out ${sent.name}!`;
         setMessage({ text });
         window.setTimeout(() => setMessage((m) => (m?.text === text ? null : m)), 2500);
       }
@@ -328,14 +339,16 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
           setMessage({ text: ev.message });
           const trainerId = ev.trainer_id;
           const newId = ev.enemy_id;
+          const sent = ev.enemy;
           if (newId) {
             setOv((o) => {
+              const sentOut = sent ? { ...(o.sentOut ?? {}), [sent.id]: sent } : o.sentOut;
               const ids = o.arenaIds ?? [];
               const keep = ids.filter((id) => id !== newId && enemies.find((e) => e.id === id)?.enemy_trainer_id !== trainerId);
               const at = ids.findIndex((id) => enemies.find((e) => e.id === id)?.enemy_trainer_id === trainerId);
               const next = [...keep];
               next.splice(at < 0 ? next.length : Math.min(at, next.length), 0, newId);
-              return { ...o, arenaIds: next };
+              return { ...o, arenaIds: next, sentOut };
             });
           }
           await sleep(1200);
@@ -493,7 +506,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
         ) : null}
       </div>
 
-      <TurnStrip order={order} phase={phase} round={state.encounter.round} meId={me?.battle_player_id ?? null} />
+      <TurnStrip state={state} order={order} phase={phase} round={state.encounter.round} meId={me?.battle_player_id ?? null} />
       {waitingCatches.length ? (
         <p className="mx-3 mt-1.5 rounded-xl bg-sky-400/15 px-3 py-1.5 text-[11px] text-sky-200">
           ⏳ Waiting for the Game Master: {waitingCatches.map((c) => c.pokemon_name).join(", ")}
@@ -513,6 +526,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
             {hiddenCount > 0 ? (
               <span className="absolute -top-5 right-0 z-10 rounded-full bg-screen-ink/80 px-2 py-0.5 text-[10px] text-mist/80">+{hiddenCount} more</span>
             ) : null}
+            <AnimatePresence initial={false}>
             {shownEnemies.map((e) => (
               <EnemySlot
                 key={e.id}
@@ -525,6 +539,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                 entering={!!seenEnemies.current && !seenEnemies.current.has(e.id)}
               />
             ))}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -540,15 +555,18 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               <p className="truncate font-display text-[13px] font-semibold text-mist">{target.name}</p>
               <span className="shrink-0 font-mono text-[10px] text-mist/60">Lv{target.level}</span>
             </div>
-            <div className="mt-0.5 flex gap-1">
+            <div className="mt-0.5 flex items-center gap-1">
               <TypePill type={target.type1} />
               <TypePill type={target.type2} />
+              {target.status !== "healthy" ? <StatusChip status={target.status} /> : null}
             </div>
             <BattleHpBar current={target.current_hp} max={target.max_hp} className="mt-1.5" />
-            {enemies.length > 12 ? (
-              <p className="mt-1 text-[10px] text-mist/55">{enemies.filter((e) => !e.fainted && !e.caught).length} of {enemies.length} enemies left</p>
+            {enemyTotals.total > 12 || (state.enemy_trainers.length > 0 && enemyTotals.total > 1) ? (
+              <p className="mt-1 text-[10px] text-mist/55">
+                {enemyTotals.left} of {enemyTotals.total} enemies left
+              </p>
             ) : null}
-            {enemies.length > 1 && enemies.length <= 12 ? (
+            {state.enemy_trainers.length === 0 && enemies.length > 1 && enemies.length <= 12 ? (
               <div className="mt-1.5 flex gap-1">
                 {enemies.map((e) => (
                   <span
@@ -607,7 +625,10 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                 ) : (
                   <Users className="m-0.5 h-4 w-4 text-mist/40" />
                 )}
-                <span className="max-w-[60px] truncate text-[9px] text-mist/70">{a.username}</span>
+                <span className="max-w-[86px] truncate text-[9px] text-mist/70">
+                  {a.username}
+                  {a.active_pokemon ? <span className="text-mist/45"> · {a.active_pokemon.name}</span> : null}
+                </span>
                 {a.active_pokemon ? (
                   <span
                     className={cn(
@@ -689,11 +710,11 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
               onClick={() => setPanel("party")}
             />
             <MainButton
-              label="Log"
-              icon={<ScrollText className="h-5 w-5" />}
+              label="Battle"
+              icon={<Users className="h-5 w-5" />}
               className="bg-gradient-to-br from-sky-400 to-indigo-500 text-white"
               disabled={false}
-              onClick={() => setPanel("log")}
+              onClick={() => setPanel("field")}
             />
           </div>
         ) : null}
@@ -707,7 +728,7 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
                 targetId={target?.id ?? null}
                 onTarget={setTargetId}
                 busy={busy}
-                onAttack={(enemyId, damage) => run({ kind: "attack", encounterId, targetEnemyId: enemyId, damage })}
+                onAttack={(enemyId, damage, hit, d20) => run({ kind: "attack", encounterId, targetEnemyId: enemyId, damage, hit, d20 })}
               />
             </SheetPanel>
           ) : null}
@@ -805,13 +826,17 @@ export function BattleScreen({ encounterId }: { encounterId: string }) {
             </SheetPanel>
           ) : null}
 
-          {panel === "log" && !over ? (
-            <SheetPanel title="Battle log" onBack={() => setPanel("main")} key="log">
-              <BattleLog state={state} />
-            </SheetPanel>
-          ) : null}
         </AnimatePresence>
       </div>
+
+      {/* The whole battle (PokéGear 14) — taller than the other sheets. */}
+      <AnimatePresence>
+        {panel === "field" && !over ? (
+          <SheetPanel title="Battle" onBack={() => setPanel("main")} key="field" tall>
+            <BattlefieldView state={state} meProfileId={me?.profile_id ?? null} />
+          </SheetPanel>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -863,12 +888,13 @@ function EnemySlot({
   const size = count === 1 ? "h-full w-[70%]" : count === 2 ? "h-[85%] w-1/2" : count === 3 ? "h-[62%] w-1/3" : "h-1/2 w-1/3";
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onSelect}
       disabled={enemy.fainted}
       className={cn("relative flex touch-manipulation items-end justify-center", size)}
       aria-label={`Target ${enemy.name}`}
+      exit={{ opacity: 0, scale: 0.3, transition: { duration: 0.35 } }}
     >
       {selected ? (
         <motion.div
@@ -888,7 +914,7 @@ function EnemySlot({
         />
         <FloaterLayer floaters={floaters} targetId={enemy.id} />
       </motion.div>
-    </button>
+    </motion.button>
   );
 }
 
@@ -922,10 +948,13 @@ function MainButton({
   );
 }
 
-function SheetPanel({ title, onBack, children }: { title: string; onBack?: () => void; children: React.ReactNode }) {
+function SheetPanel({ title, onBack, children, tall }: { title: string; onBack?: () => void; children: React.ReactNode; tall?: boolean }) {
   return (
     <motion.div
-      className="absolute inset-x-3 bottom-3 top-2 z-30 flex flex-col rounded-2xl border border-white/10 bg-screen-deep/95 p-3 shadow-glass backdrop-blur"
+      className={cn(
+        "absolute inset-x-3 bottom-3 z-30 flex flex-col rounded-2xl border border-white/10 bg-screen-deep/95 p-3 shadow-glass backdrop-blur",
+        tall ? "top-16 z-40" : "top-2"
+      )}
       initial={{ y: 30, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 30, opacity: 0 }}
@@ -1016,8 +1045,8 @@ export function BattleLog({ state, className }: { state: BattleState; className?
       {logs.length === 0 ? <p className="py-4 text-center text-xs text-mist/40">Nothing has happened yet.</p> : null}
       {logs.map((l) => (
         <div key={l.id} className="flex gap-2 text-[11px] leading-snug">
-          <span className="shrink-0 font-mono text-[9px] text-mist/35">
-            {new Date(l.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          <span className="w-7 shrink-0 font-mono text-[9px] text-mist/35" title={new Date(l.created_at).toLocaleTimeString()}>
+            {l.round ? `R${l.round}` : "—"}
           </span>
           <span
             className={cn(
@@ -1028,14 +1057,234 @@ export function BattleLog({ state, className }: { state: BattleState; className?
                   ? "font-semibold text-volt"
                   : l.action === "item"
                     ? "text-emerald-300"
-                    : "text-mist/80"
+                    : l.action === "trainer_switch" || l.action === "switch"
+                      ? "text-sky-200"
+                      : l.action === "turn" || l.action === "round"
+                        ? "text-mist/45"
+                        : "text-mist/80"
             )}
           >
             {l.message}
             {l.is_critical ? <span className="ml-1 text-volt">(critical)</span> : null}
+            {l.edited_at ? <span className="ml-1 text-[9px] text-amber-300">(corrected)</span> : null}
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The whole battle at a glance (PokéGear 14): every trainer on your side with
+// their active Pokémon and bench, the enemy side, the order and the log.
+// ---------------------------------------------------------------------------
+function BattlefieldView({ state, meProfileId }: { state: BattleState; meProfileId: string | null }) {
+  const [tab, setTab] = React.useState<"field" | "order" | "log">("field");
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-2 grid grid-cols-3 gap-1 rounded-xl bg-white/5 p-1" role="tablist">
+        {(
+          [
+            ["field", "Field"],
+            ["order", "Order"],
+            ["log", "Log"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setTab(k)}
+            className={cn("touch-manipulation rounded-lg py-1.5 text-xs font-semibold", tab === k ? "bg-white/15 text-mist" : "text-mist/55")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "field" ? <FieldTab state={state} meProfileId={meProfileId} /> : null}
+        {tab === "order" ? <OrderTab state={state} meProfileId={meProfileId} /> : null}
+        {tab === "log" ? <BattleLog state={state} className="min-h-full" /> : null}
+      </div>
+    </div>
+  );
+}
+
+function SideHeading({ children, tone }: { children: React.ReactNode; tone: "friend" | "enemy" }) {
+  return (
+    <p className={cn("mb-1 mt-1 text-[10px] font-bold uppercase tracking-wider", tone === "friend" ? "text-sky-300" : "text-rotom-red-light")}>{children}</p>
+  );
+}
+
+function MonRow({
+  name,
+  level,
+  speciesId,
+  spriteUrl,
+  shiny,
+  currentHp,
+  maxHp,
+  status,
+  active,
+  dead,
+}: {
+  name: string;
+  level: number;
+  speciesId: number | null;
+  spriteUrl?: string | null;
+  shiny?: boolean;
+  currentHp: number;
+  maxHp: number;
+  status: PokemonStatus | null;
+  active: boolean;
+  dead?: boolean;
+}) {
+  const down = dead || currentHp <= 0 || status === "fainted";
+  return (
+    <div className={cn("flex items-center gap-2 rounded-lg px-1.5 py-1", active ? "bg-volt/10 ring-1 ring-volt/40" : "bg-white/[0.03]", down && !active && "opacity-50")}>
+      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+        <BattleSprite speciesId={speciesId} spriteUrl={spriteUrl} shiny={shiny} alt="" className={cn("h-8 w-8", down && "grayscale")} />
+        {dead ? <Skull className="absolute -right-1 -top-1 h-3 w-3 text-mist/70" /> : null}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1">
+          <p className="truncate text-xs font-medium text-mist">{name}</p>
+          <span className="shrink-0 font-mono text-[9px] text-mist/45">Lv{level}</span>
+          {status && status !== "healthy" ? <StatusChip status={status} /> : null}
+          {active ? <span className="ml-auto shrink-0 rounded bg-volt/25 px-1 text-[8px] font-bold uppercase text-volt">Active</span> : null}
+        </div>
+        <BattleHpBar current={Math.max(0, currentHp)} max={maxHp} className="mt-0.5" />
+      </div>
+      <span className="w-12 shrink-0 text-right font-mono text-[10px] text-mist/60">
+        {dead ? "Dead" : `${Math.max(0, currentHp)}/${maxHp}`}
+      </span>
+    </div>
+  );
+}
+
+function FieldTab({ state, meProfileId }: { state: BattleState; meProfileId: string | null }) {
+  const players = [...state.players].sort((a, b) => Number(b.profile_id === meProfileId) - Number(a.profile_id === meProfileId));
+  const wild = state.enemies.filter((e) => !e.enemy_trainer_id && !e.caught);
+  return (
+    <div className="space-y-2 pb-1">
+      <SideHeading tone="friend">Your side</SideHeading>
+      {players.map((p) => {
+        const team = [...(p.team ?? [])].sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.party_slot - b.party_slot);
+        const mine = p.profile_id === meProfileId;
+        return (
+          <div key={p.id} className="rounded-xl bg-white/5 p-2">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-mist">
+              {mine ? "You" : p.username}
+              {!mine ? <span className="rounded bg-sky-400/15 px-1 text-[9px] font-medium text-sky-200">Teammate</span> : null}
+              <span className="ml-auto text-[10px] font-normal text-mist/45">{p.usable_count} can fight</span>
+            </p>
+            {!p.active_pokemon ? <p className="mb-1 text-[10px] text-amber-300">Choosing a Pokémon…</p> : null}
+            <div className="space-y-1">
+              {team.map((m) => (
+                <MonRow
+                  key={m.id}
+                  name={m.name}
+                  level={m.level}
+                  speciesId={m.species_id}
+                  shiny={m.is_shiny}
+                  currentHp={m.current_hp}
+                  maxHp={m.max_hp}
+                  status={m.status}
+                  active={m.is_active}
+                  dead={m.is_dead}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      <SideHeading tone="enemy">Enemy side</SideHeading>
+      {state.enemy_trainers.map((t) => {
+        const a = state.enemies.find((e) => e.id === t.active_enemy_id) ?? null;
+        const benchLeft = Math.max(0, t.remaining - (a && a.current_hp > 0 ? 1 : 0));
+        return (
+          <div key={t.id} className="rounded-xl bg-rotom-red/[0.07] p-2">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-rotom-red-light">
+              {t.name}
+              <span className="ml-auto text-[10px] font-normal text-mist/50">
+                {t.remaining}/{t.total} left
+              </span>
+            </p>
+            {a ? (
+              <MonRow
+                name={a.name}
+                level={a.level}
+                speciesId={a.species_id}
+                spriteUrl={a.sprite_url}
+                currentHp={a.current_hp}
+                maxHp={a.max_hp}
+                status={a.status}
+                active
+              />
+            ) : (
+              <p className="text-[10px] text-mist/45">No Pokémon left.</p>
+            )}
+            {benchLeft > 0 ? <p className="mt-1 text-[10px] text-mist/45">+{benchLeft} more on the bench</p> : null}
+          </div>
+        );
+      })}
+      {wild.length ? (
+        <div className="rounded-xl bg-rotom-red/[0.07] p-2">
+          <p className="mb-1 text-xs font-semibold text-rotom-red-light">Wild Pokémon</p>
+          <div className="space-y-1">
+            {wild.map((e) => (
+              <MonRow
+                key={e.id}
+                name={e.name}
+                level={e.level}
+                speciesId={e.species_id}
+                spriteUrl={e.sprite_url}
+                currentHp={e.current_hp}
+                maxHp={e.max_hp}
+                status={e.status}
+                active={!e.fainted}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OrderTab({ state, meProfileId }: { state: BattleState; meProfileId: string | null }) {
+  if (state.order.length === 0) return <p className="py-6 text-center text-xs text-mist/50">No turn order yet.</p>;
+  return (
+    <div className="space-y-1">
+      {state.order.map((o) => {
+        const c = combatantFor(state, o);
+        const me = o.profile_id === meProfileId;
+        return (
+          <div
+            key={o.id}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-2 py-1.5",
+              o.is_current ? "bg-volt/15 ring-1 ring-volt/50" : "bg-white/[0.04]",
+              !o.can_act && state.encounter.phase === "fighting" && "opacity-45"
+            )}
+          >
+            <span className="w-5 shrink-0 text-center font-mono text-xs text-mist/50">{o.position ?? "–"}</span>
+            <BattleSprite speciesId={c.speciesId} spriteUrl={c.spriteUrl} shiny={c.shiny} alt="" className="h-7 w-7 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className={cn("truncate text-xs font-semibold", c.side === "enemies" ? "text-rotom-red-light" : me ? "text-sky-200" : "text-mist")}>
+                {me ? "You" : o.name}
+                {o.is_current ? <span className="ml-1 text-[9px] font-bold uppercase text-volt">· Now</span> : null}
+              </p>
+              <p className="truncate text-[10px] text-mist/55">
+                {c.pokemonName ? `${c.pokemonName}${c.currentHp !== null && c.maxHp ? ` · ${Math.max(0, c.currentHp)}/${c.maxHp}` : ""}` : "—"}
+              </p>
+            </div>
+            <span className="shrink-0 font-mono text-[11px] text-mist/70">{o.awaiting ? "…" : o.rolls.join("/") || "—"}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1083,36 +1332,114 @@ function PokeballIcon() {
 // Turns (PokéGear 12.1)
 // ---------------------------------------------------------------------------
 
-/** Everyone in the fight, in initiative order, with whose turn it is. */
+/** Who stands behind a place in the order right now (PokéGear 14). */
+export interface Combatant {
+  side: "players" | "enemies";
+  pokemonName: string | null;
+  speciesId: number | null;
+  spriteUrl: string | null;
+  shiny: boolean;
+  currentHp: number | null;
+  maxHp: number | null;
+  status: PokemonStatus | null;
+}
+
+export function combatantFor(state: BattleState, entry: BattleTurnEntry): Combatant {
+  if (entry.kind === "player") {
+    const p = state.players.find((x) => x.id === entry.battle_player_id);
+    const ap = p?.active_pokemon ?? null;
+    return {
+      side: "players",
+      pokemonName: ap?.name ?? null,
+      speciesId: ap?.species_id ?? null,
+      spriteUrl: null,
+      shiny: ap?.is_shiny ?? false,
+      currentHp: ap?.current_hp ?? null,
+      maxHp: ap?.max_hp ?? null,
+      status: ap?.status ?? null,
+    };
+  }
+  const enemyId =
+    entry.kind === "enemy" ? entry.enemy_id : (state.enemy_trainers.find((t) => t.id === entry.enemy_trainer_id)?.active_enemy_id ?? null);
+  const e = state.enemies.find((x) => x.id === enemyId) ?? null;
+  return {
+    side: "enemies",
+    pokemonName: e?.name ?? null,
+    speciesId: e?.species_id ?? null,
+    spriteUrl: e?.sprite_url ?? null,
+    shiny: false,
+    currentHp: e?.current_hp ?? null,
+    maxHp: e?.max_hp ?? null,
+    status: e && e.current_hp <= 0 ? "fainted" : (e?.status ?? null),
+  };
+}
+
+/**
+ * Whose turn it is — the trainer (or wild Pokémon) and the Pokémon they have
+ * out — plus everyone in initiative order (PokéGear 14).
+ */
 function TurnStrip({
+  state,
   order,
   phase,
   round,
   meId,
 }: {
+  state: BattleState;
   order: BattleTurnEntry[];
   phase: "initiative" | "fighting";
   round: number;
   meId: string | null;
 }) {
   if (order.length === 0) return null;
-  const current = order.find((o) => o.is_current);
+  const current = order.find((o) => o.is_current) ?? null;
   const mine = !!current && current.battle_player_id === meId;
+  const c = current ? combatantFor(state, current) : null;
+  const trainerTurn = current?.kind === "trainer";
   return (
-    <div className="mx-3 mt-2 rounded-2xl bg-screen-ink/70 px-2.5 py-2 ring-1 ring-white/10">
-      <p className={cn("mb-1.5 text-[11px] font-semibold", mine ? "text-volt" : "text-mist/80")}>
-        {phase === "initiative"
-          ? "🎲 Initiative — everyone rolls a d20"
-          : mine
-            ? `Round ${round} · Your turn!`
-            : `Round ${round} · ${current ? `${current.name}'s turn` : "…"}`}
-      </p>
-      <div className="flex flex-wrap gap-1">
+    <div className="mx-3 mt-2 rounded-2xl bg-screen-ink/70 px-2.5 py-2 ring-1 ring-white/10" data-testid="turn-banner">
+      {phase === "initiative" ? (
+        <p className="mb-1.5 text-[11px] font-semibold text-mist/80">🎲 Initiative — everyone rolls a d20</p>
+      ) : current && c ? (
+        <div
+          className={cn(
+            "mb-1.5 flex items-center gap-2 rounded-xl px-2 py-1",
+            mine ? "bg-volt/15 ring-1 ring-volt/50" : c.side === "enemies" ? "bg-rotom-red/15 ring-1 ring-rotom-red/40" : "bg-sky-400/10 ring-1 ring-sky-400/30"
+          )}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center">
+            {c.speciesId || c.spriteUrl ? (
+              <BattleSprite speciesId={c.speciesId} spriteUrl={c.spriteUrl} shiny={c.shiny} alt="" className="h-9 w-9" />
+            ) : (
+              <Users className="h-5 w-5 text-mist/40" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-mist/55">
+              Current turn · #{current.position} · Round {round} · {c.side === "enemies" ? "Enemy" : mine ? "You" : "Your team"}
+            </p>
+            <p className={cn("truncate font-display text-sm font-bold", mine ? "text-volt" : c.side === "enemies" ? "text-rotom-red-light" : "text-mist")}>
+              {mine ? "Your turn!" : current.name}
+              {c.pokemonName && (current.kind !== "enemy" || trainerTurn) ? (
+                <span className="font-sans text-[11px] font-medium text-mist/70"> · ⚡ {c.pokemonName}</span>
+              ) : null}
+            </p>
+          </div>
+          {c.currentHp !== null && c.maxHp ? (
+            <div className="w-[74px] shrink-0">
+              <BattleHpBar current={Math.max(0, c.currentHp)} max={c.maxHp} showNumbers />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mb-1.5 text-[11px] font-semibold text-mist/80">Round {round}</p>
+      )}
+      <div className="no-scrollbar flex gap-1 overflow-x-auto" aria-label="Initiative order">
         {order.map((o) => (
           <span
             key={o.id}
             className={cn(
-              "flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
+              "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
               o.is_current
                 ? "bg-volt font-semibold text-screen-ink"
                 : !o.can_act && phase === "fighting"
@@ -1124,7 +1451,8 @@ function TurnStrip({
                       : "bg-white/10 text-mist/80"
             )}
           >
-            <span className="truncate">{o.battle_player_id === meId ? "You" : o.name}</span>
+            {o.position ? <span className="font-mono opacity-60">{o.position}.</span> : null}
+            <span className="max-w-[90px] truncate">{o.battle_player_id === meId ? "You" : o.name}</span>
             <span className="font-mono">{o.awaiting ? "…" : o.roll ?? "?"}</span>
           </span>
         ))}
@@ -1211,13 +1539,18 @@ function AttackPanel({
   targetId: string | null;
   onTarget: (id: string) => void;
   busy: boolean;
-  onAttack: (enemyId: string, damage: number) => void;
+  onAttack: (enemyId: string, damage: number, hit: boolean, d20: number | null) => void;
 }) {
   const [hit, setHit] = React.useState(false);
   const [value, setValue] = React.useState("");
+  const [roll, setRoll] = React.useState("");
   const target = enemies.find((e) => e.id === targetId) ?? enemies[0] ?? null;
   const n = Number(value);
-  const valid = value !== "" && Number.isInteger(n) && n >= 1 && n <= 9999;
+  // A hit can do 0 damage (e.g. it had no effect).
+  const valid = value !== "" && Number.isInteger(n) && n >= 0 && n <= 9999;
+  const r = Number(roll);
+  const rollValid = roll === "" || (Number.isInteger(r) && r >= 1 && r <= 20);
+  const d20 = roll === "" || !rollValid ? null : r;
   if (!target) return <p className="py-6 text-center text-xs text-mist/50">No enemy left to attack.</p>;
 
   return (
@@ -1242,11 +1575,30 @@ function AttackPanel({
         </div>
       </div>
 
+      <div className="flex items-center gap-2">
+        <label htmlFor="atk-d20" className="text-[11px] text-mist/50">
+          Your d20 roll <span className="text-mist/35">(optional, for the log)</span>
+        </label>
+        <input
+          id="atk-d20"
+          inputMode="numeric"
+          value={roll}
+          onChange={(e) => setRoll(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+          placeholder="d20"
+          aria-label="Your d20 roll"
+          className={cn(
+            "ml-auto w-16 rounded-xl border bg-white/5 px-2 py-1.5 text-center font-mono text-sm text-mist placeholder:text-mist/30 focus:outline-none focus:ring-1 focus:ring-volt",
+            rollValid ? "border-white/15" : "border-rotom-red"
+          )}
+        />
+      </div>
+      {!rollValid ? <p className="-mt-2 text-[11px] text-rotom-red-light">A d20 roll is 1–20.</p> : null}
+
       {!hit ? (
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !rollValid}
             onClick={() => setHit(true)}
             className="touch-manipulation rounded-2xl bg-gradient-to-br from-rotom-red to-rotom-red-dark py-4 font-display text-base font-bold uppercase text-white shadow-glass active:scale-95 disabled:opacity-40"
           >
@@ -1254,8 +1606,8 @@ function AttackPanel({
           </button>
           <button
             type="button"
-            disabled={busy}
-            onClick={() => onAttack(target.id, 0)}
+            disabled={busy || !rollValid}
+            onClick={() => onAttack(target.id, 0, false, d20)}
             className="touch-manipulation rounded-2xl bg-white/10 py-4 font-display text-base font-bold uppercase text-mist shadow-glass active:scale-95 disabled:opacity-40"
           >
             Miss
@@ -1263,7 +1615,7 @@ function AttackPanel({
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-[11px] text-mist/50">How much damage does your attack do?</p>
+          <p className="text-[11px] text-mist/50">How much damage does your attack do? (0 if it hit but did nothing)</p>
           <div className="flex gap-2">
             <input
               autoFocus
@@ -1271,7 +1623,7 @@ function AttackPanel({
               value={value}
               onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && valid) onAttack(target.id, n);
+                if (e.key === "Enter" && valid && rollValid) onAttack(target.id, n, true, d20);
               }}
               placeholder="e.g. 30"
               aria-label="Damage"
@@ -1279,14 +1631,14 @@ function AttackPanel({
             />
             <button
               type="button"
-              disabled={!valid || busy}
-              onClick={() => onAttack(target.id, n)}
+              disabled={!valid || !rollValid || busy}
+              onClick={() => onAttack(target.id, n, true, d20)}
               className="flex-1 touch-manipulation rounded-xl bg-rotom-red py-2.5 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-40"
             >
-              {valid ? `Deal ${n} damage` : "Type the damage"}
+              {valid ? (n === 0 ? "Hit — no damage" : `Deal ${n} damage`) : "Type the damage"}
             </button>
           </div>
-          {valid ? (
+          {valid && n > 0 ? (
             <p className="font-mono text-[11px] text-mist/60">
               {target.name}: {target.current_hp}/{target.max_hp} → {Math.max(0, target.current_hp - n)}/{target.max_hp}
               {target.current_hp - n <= 0 ? " · faints" : ""}
