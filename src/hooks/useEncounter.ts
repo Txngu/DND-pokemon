@@ -9,6 +9,7 @@ import type {
   Move,
   PartyHealResult,
   PokemonBattleProfile,
+  PokemonStatus,
   RewardSplitMode,
   XpAllocationResult,
   XpPool,
@@ -142,7 +143,7 @@ function useInvalidateAfterBattleAction() {
 }
 
 export type BattleAction =
-  | { kind: "attack"; encounterId: string; targetEnemyId: string; damage: number }
+  | { kind: "attack"; encounterId: string; targetEnemyId: string; damage: number; hit: boolean; d20: number | null }
   | { kind: "item"; encounterId: string; itemId: string; pokemonId: string }
   | { kind: "switch"; encounterId: string; pokemonId: string }
   | { kind: "catch"; encounterId: string; enemyId: string; ballItemId: string };
@@ -158,10 +159,12 @@ export function useBattleAction() {
     mutationFn: async (action: BattleAction): Promise<BattleActionResult> => {
       const res =
         action.kind === "attack"
-          ? await supabase.rpc("battle_turn_attack", {
+          ? await supabase.rpc("battle_record_attack", {
               p_encounter_id: action.encounterId,
               p_target_enemy_id: action.targetEnemyId,
               p_damage: action.damage,
+              p_d20: action.d20,
+              p_hit: action.hit,
             })
           : action.kind === "item"
             ? await supabase.rpc("battle_use_item", {
@@ -388,14 +391,31 @@ export function useAdminAdjustEnemyHp() {
   });
 }
 
-/** The enemy whose turn it is attacks: the GM picks the target and types the damage (0 = missed). */
+/**
+ * The enemy whose turn it is attacks: the GM picks the target, Hit or Miss,
+ * the damage, and (optionally) the d20 that was rolled at the table.
+ */
 export function useAdminEnemyTurnAttack() {
   return useAdminBattleMutation(
-    async ({ encounterId, targetPokemonId, damage }: { encounterId: string; targetPokemonId: string; damage: number }) => {
-      const { data, error } = await supabase.rpc("admin_enemy_turn_attack", {
+    async ({
+      encounterId,
+      targetPokemonId,
+      damage,
+      hit,
+      d20,
+    }: {
+      encounterId: string;
+      targetPokemonId: string;
+      damage: number;
+      hit: boolean;
+      d20: number | null;
+    }) => {
+      const { data, error } = await supabase.rpc("admin_record_enemy_attack", {
         p_encounter_id: encounterId,
         p_target_pokemon_id: targetPokemonId,
         p_damage: damage,
+        p_d20: d20,
+        p_hit: hit,
       });
       if (error) throw error;
       return data as BattleActionResult;
@@ -435,7 +455,51 @@ export function useAdminSkipTurn() {
   });
 }
 
-/** GM: enter an enemy's d20 roll, or enter/correct a trainer's roll during initiative. */
+/** GM (PokéGear 14): back to the previous turn. */
+export function useAdminPreviousTurn() {
+  return useAdminBattleMutation(async ({ encounterId }: { encounterId: string }) => {
+    const { error } = await supabase.rpc("admin_previous_turn", { p_encounter_id: encounterId });
+    if (error) throw error;
+  });
+}
+
+/** GM (PokéGear 14): give the turn to one combatant. */
+export function useAdminSetTurn() {
+  return useAdminBattleMutation(async ({ encounterId, entryId }: { encounterId: string; entryId: string }) => {
+    const { error } = await supabase.rpc("admin_set_turn", { p_encounter_id: encounterId, p_entry_id: entryId });
+    if (error) throw error;
+  });
+}
+
+/** GM (PokéGear 14): move a combatant to another place in the order. */
+export function useAdminMoveTurnEntry() {
+  return useAdminBattleMutation(async ({ entryId, position }: { entryId: string; position: number }) => {
+    const { data, error } = await supabase.rpc("admin_move_turn_entry", { p_entry_id: entryId, p_position: position });
+    if (error) throw error;
+    return data as number;
+  });
+}
+
+/** GM (PokéGear 14): correct an attack in the log; the target's KP moves by the difference. */
+export function useAdminEditAttackLog() {
+  return useAdminBattleMutation(
+    async ({ logId, d20, hit, damage }: { logId: string; d20: number | null; hit: boolean; damage: number }) => {
+      const { data, error } = await supabase.rpc("admin_edit_attack_log", { p_log_id: logId, p_d20: d20, p_hit: hit, p_damage: damage });
+      if (error) throw error;
+      return data as { hp_before: number; hp_after: number; damage: number; hit: boolean };
+    }
+  );
+}
+
+/** GM (PokéGear 14): status of an enemy Pokémon. */
+export function useAdminSetEnemyStatus() {
+  return useAdminBattleMutation(async ({ enemyId, status }: { enemyId: string; status: PokemonStatus }) => {
+    const { error } = await supabase.rpc("admin_set_enemy_status", { p_enemy_id: enemyId, p_status: status });
+    if (error) throw error;
+  });
+}
+
+/** GM: enter an enemy's d20 roll, or enter/correct anyone's roll (mid-fight it moves them to their new place). */
 export function useAdminSetInitiative() {
   return useAdminBattleMutation(async ({ entryId, roll }: { entryId: string; roll: number }) => {
     const { error } = await supabase.rpc("admin_set_initiative", { p_entry_id: entryId, p_roll: roll });

@@ -795,6 +795,12 @@ export interface Database {
           is_critical: boolean | null;
           effectiveness: number | null;
           message: string | null;
+          round: number | null;
+          d20: number | null;
+          hit: boolean | null;
+          damage: number | null;
+          attacker_label: string | null;
+          edited_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1317,6 +1323,23 @@ export interface Database {
       admin_set_initiative: { Args: { p_entry_id: string; p_roll: number }; Returns: void };
       admin_enemy_turn_attack: { Args: { p_encounter_id: string; p_target_pokemon_id: string; p_damage: number }; Returns: unknown };
       admin_skip_turn: { Args: { p_encounter_id: string }; Returns: void };
+      // PokéGear 14
+      battle_record_attack: {
+        Args: { p_encounter_id: string; p_target_enemy_id: string; p_damage: number; p_d20: number | null; p_hit: boolean };
+        Returns: unknown;
+      };
+      admin_record_enemy_attack: {
+        Args: { p_encounter_id: string; p_target_pokemon_id: string; p_damage: number; p_d20: number | null; p_hit: boolean };
+        Returns: unknown;
+      };
+      admin_previous_turn: { Args: { p_encounter_id: string }; Returns: void };
+      admin_set_turn: { Args: { p_encounter_id: string; p_entry_id: string }; Returns: void };
+      admin_move_turn_entry: { Args: { p_entry_id: string; p_position: number }; Returns: number };
+      admin_edit_attack_log: {
+        Args: { p_log_id: string; p_d20: number | null; p_hit: boolean; p_damage: number };
+        Returns: unknown;
+      };
+      admin_set_enemy_status: { Args: { p_enemy_id: string; p_status: PokemonStatus }; Returns: void };
       suggest_moves: {
         Args: { p_type1: string; p_type2: string | null; p_level: number };
         Returns: Database["public"]["Tables"]["moves"]["Row"][];
@@ -1443,6 +1466,8 @@ export interface BattleEnemyState {
   caught: boolean;
   caught_by_name: string | null;
   catchable: boolean;
+  /** PokéGear 14: poisoned, asleep, … (fainting comes from KP). */
+  status: PokemonStatus;
   /** Game Master only */
   attack?: number;
   defense?: number;
@@ -1474,6 +1499,14 @@ export interface BattlePlayerState {
   joined_at: string;
   usable_count: number;
   active_pokemon: BattleActivePokemon | null;
+  /** PokéGear 14: the trainer's whole Team (active + bench), visible to everyone in the battle. */
+  team: BattleTeamMember[];
+}
+
+export interface BattleTeamMember extends BattleActivePokemon {
+  is_dead: boolean;
+  party_slot: number;
+  is_active: boolean;
 }
 
 export interface BattlePartyPokemon extends BattleActivePokemon {
@@ -1527,6 +1560,13 @@ export interface BattleLogEntry {
   enemy_id: string | null;
   target_pokemon_id: string | null;
   created_at: string;
+  /** PokéGear 14 — round of the fight, and the tabletop details of an attack. */
+  round: number | null;
+  d20: number | null;
+  hit: boolean | null;
+  damage: number | null;
+  attacker_label: string | null;
+  edited_at: string | null;
 }
 
 export interface BattleRewardRecipient {
@@ -1644,6 +1684,10 @@ export interface BattleEvent {
   trainer_name?: string;
   enemy_id?: string;
   enemy_name?: string;
+  /** PokéGear 14: the Pokémon sent out (players can't see a trainer's bench beforehand). */
+  enemy?: BattleEnemyState;
+  /** PokéGear 14: the d20 roll typed in for an attack, if any. */
+  d20?: number | null;
 }
 
 export interface BattleActionResult {
