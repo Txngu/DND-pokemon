@@ -561,6 +561,38 @@ Run `supabase/migrations/0015_pokegear_v13_1.sql` in the Supabase SQL editor (**
 - When an enemy trainer's Pokémon faints from your attack, the playback shows it fainting, then "*Trainer* sends out *Pokémon*!" and the next one comes in with an entrance animation in the same spot.
 - Switches you didn't cause (another player's knockout, the GM switching or lowering KP) are announced the same way as soon as they happen.
 
+## PokéGear Version 14: Tabletop battle control (2v2, switching, turns, d20)
+
+### Deploying
+Run `supabase/migrations/0016_pokegear_v14.sql` in the Supabase SQL editor (**after** 0015), then push. Safe to run twice. Nothing is reset.
+
+### How a battle runs (unchanged at the table)
+Roll initiative → the order is set → take turns → roll the physical d20 → record Hit/Miss and damage → KP updates for everyone → next turn. The app never rolls dice, never decides hit or miss and never calculates damage.
+
+### Turns and initiative (GM)
+- Players type their own d20 initiative; the GM enters enemy rolls and can enter or fix anyone's roll. Ties roll again; the fight starts automatically when every roll is in.
+- During the fight the GM can: **Next turn**, **Previous** (also back into the previous round), **Turn** (give the turn to anyone), **▲▼** (move someone in the order), and **Fix** a roll (they move to where the new roll belongs). Whoever's turn it is keeps it when the order changes.
+- A player's attack, item or switch still ends their turn automatically.
+
+### Whose turn is it?
+- Everyone sees a banner: **current turn** (trainer or wild Pokémon), **active Pokémon** with sprite and KP, place in the order, round and side, plus the whole order underneath. It updates live.
+
+### Enemy trainers: active and bench
+- Each enemy trainer has one active Pokémon; the rest are the bench. In the battle monitor each trainer has **Switch Pokémon…** (or *Switch in X* on a Pokémon). The log says "Brock withdraws Geodude and sends out Onix!" and players see the old one leave and the new one come in.
+- Switching keeps KP, status and the fainted state; it never changes the order or the turn. A fainted Pokémon can't be switched in until its KP is raised (revive). If a trainer had nobody left and the GM revives one, it comes back out.
+- The GM can set an enemy Pokémon's status (poisoned, asleep, …).
+- Players see only each enemy trainer's active Pokémon and how many are left ("4/6 left"); the bench stays hidden.
+
+### 2v2 and bigger battles (players)
+- **Battle** button → **Field**: you, each teammate (active + bench with KP and status), the enemy trainers' active Pokémon, and wild Pokémon. **Order**: the initiative order with each combatant's Pokémon. **Log**: the battle log with rounds.
+- Teammates' active Pokémon are also shown in the arena. Players can only act with their own Pokémon.
+- One active Pokémon per trainer; any number of players and enemy trainers.
+
+### d20, Hit/Miss and the log
+- Attacking (player or GM): optional **d20 roll**, then **Hit** (type the damage; 0 = it hit but did nothing) or **Miss**. The log records round, attacker, target, d20, hit/miss and damage.
+- The GM can correct an attack in the log (✎): new d20 / Hit or Miss / damage. The target's KP changes by the difference, damage totals are updated, and a correction line is written.
+- In the monitor the GM also sees every player's Team (active + bench) and can change KP (damage, heal, revive) and status there.
+
 ## What's next (out of scope for Phase 1)
 
 Bag, PC, Shop, and Trade currently render placeholder screens reachable from the home grid and dock. Building out their real functionality (inventory, box storage, purchasing, trading) is Phase 2+.
